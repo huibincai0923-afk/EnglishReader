@@ -9,6 +9,7 @@ let lastActivity=0;
 let timerInterval=null;
 let activeBookId="";
 let library=JSON.parse(localStorage.getItem("reader-library")||"[]");
+let readerMargin=localStorage.getItem("reader-margin")||"medium";
 let marks=JSON.parse(localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks")||"[]");
 
 const $=id=>document.getElementById(id);
@@ -181,6 +182,59 @@ function escapeHtml(x){
   return String(x??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 }
 
+
+const marginMenu=document.createElement("div");
+marginMenu.className="margin-menu";
+marginMenu.innerHTML=
+  '<button data-margin="narrow">Narrow</button>'+
+  '<button data-margin="medium">Medium</button>'+
+  '<button data-margin="wide">Wide</button>';
+marginMenu.style.display="none";
+document.body.appendChild(marginMenu);
+
+$("marginBtn").onclick=()=>{
+  const r=$("marginBtn").getBoundingClientRect();
+  marginMenu.style.left=r.left+"px";
+  marginMenu.style.top=(r.bottom+8)+"px";
+  marginMenu.style.display=marginMenu.style.display==="none"?"flex":"none";
+  syncMarginMenu();
+};
+function syncMarginMenu(){
+  marginMenu.querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.margin===readerMargin));
+}
+marginMenu.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+  readerMargin=b.dataset.margin;
+  localStorage.setItem("reader-margin",readerMargin);
+  applyReaderMargin();
+  syncMarginMenu();
+  marginMenu.style.display="none";
+});
+document.addEventListener("mousedown",e=>{
+  if(marginMenu.style.display!=="none" && !marginMenu.contains(e.target) && e.target!==$("marginBtn"))
+    marginMenu.style.display="none";
+});
+function applyReaderMargin(){
+  const widths={narrow:"28px",medium:"58px",wide:"92px"};
+  const pad=widths[readerMargin]||widths.medium;
+  document.documentElement.style.setProperty("--reader-margin",pad);
+  // Apply to the outer reader viewport. EPUB content also gets a matching
+  // horizontal padding when its document is available.
+  $("viewer")?.style.setProperty("padding-left",pad);
+  $("viewer")?.style.setProperty("padding-right",pad);
+  if(book?.renderer?.getContents){
+    book.renderer.getContents().forEach(c=>{
+      try{
+        const d=c.document;
+        d.documentElement.style.setProperty("--epub-margin",pad);
+        d.body.style.paddingLeft=pad;
+        d.body.style.paddingRight=pad;
+      }catch(e){}
+    });
+  }
+}
+syncMarginMenu();
+applyReaderMargin();
+
 async function openBook(file){
  try{
   const buf=await file.arrayBuffer();
@@ -323,10 +377,18 @@ function showWord(kind,key){
 
 
 
+
 function installMarking(view){
   const doc=view?.document;
-  if(!doc || doc.__markInstalled) return;
+  const win=doc?.defaultView;
+  if(!doc || !win) return;
+
+  // Rebind on the current EPUB document. Do not rely on a one-time
+  // selectionchange listener because EPUB.js can replace the iframe document.
+  if(doc.__markInstalled) return;
   doc.__markInstalled=true;
+
+  let pendingRange=null;
 
   const bubble=doc.createElement("div");
   bubble.className="mark-bubble hidden";
@@ -336,135 +398,123 @@ function installMarking(view){
     '<button data-c="blue" title="Blue">🩵</button>'+
     '<button data-c="purple" title="Purple">🟪</button>'+
     '<button data-c="green" title="Green">🟩</button>';
+  Object.assign(bubble.style,{position:"fixed",zIndex:"2147483647"});
   doc.body.appendChild(bubble);
 
-  let pendingRange=null;
-  let pendingText="";
-
-  function syncPalette(){
+  function sync(){
     bubble.querySelectorAll("button").forEach(b=>{
       b.classList.toggle("active-mark",b.dataset.c===markColor);
     });
   }
-  syncPalette();
+  sync();
 
-  function hidePalette(){
+  function hide(){
     bubble.classList.add("hidden");
     pendingRange=null;
-    pendingText="";
   }
 
-  function showPalette(){
-    const sel=doc.defaultView.getSelection();
-    if(!sel || sel.rangeCount===0 || sel.isCollapsed) return;
-    const text=sel.toString().replace(/\s+/g," ").trim();
-    if(!text) return;
+  function readSelection(){
+    const sel=win.getSelection();
+    if(!sel || sel.rangeCount===0 || sel.isCollapsed || !sel.toString().trim()){
+      return null;
+    }
+    const r=sel.getRangeAt(0);
+    if(!doc.body.contains(r.commonAncestorContainer)) return null;
+    return r.cloneRange();
+  }
 
-    const range=sel.getRangeAt(0);
-    if(!doc.body.contains(range.commonAncestorContainer)) return;
-
-    pendingRange=range.cloneRange();
-    pendingText=text;
-    syncPalette();
+  function show(){
+    const r=readSelection();
+    if(!r) return;
+    pendingRange=r;
+    sync();
     bubble.classList.remove("hidden");
 
     requestAnimationFrame(()=>{
-      const rect=pendingRange.getBoundingClientRect();
-      const win=doc.defaultView;
-      const w=bubble.offsetWidth||190;
-      const h=bubble.offsetHeight||42;
-      bubble.style.left=Math.max(8,Math.min(win.innerWidth-w-8,rect.left+rect.width/2-w/2))+"px";
-      bubble.style.top=Math.max(8,rect.top-h-10)+"px";
+      const rect=r.getBoundingClientRect();
+      const w=bubble.offsetWidth||190, h=bubble.offsetHeight||44;
+      let left=rect.left+rect.width/2-w/2;
+      let top=rect.top-h-10;
+      left=Math.max(8,Math.min(win.innerWidth-w-8,left));
+      top=Math.max(8,top);
+      bubble.style.left=left+"px";
+      bubble.style.top=top+"px";
     });
   }
 
-  // selectionchange works for selections spanning multiple text nodes,
-  // including vocabulary-highlight spans.
-  doc.addEventListener("selectionchange",()=>{
-    clearTimeout(doc.__markTimer);
-    doc.__markTimer=setTimeout(()=>{
-      const sel=doc.defaultView.getSelection();
-      if(sel && !sel.isCollapsed && sel.toString().trim()) showPalette();
-    },60);
-  });
+  // The important fix: mouseup/touchend is the primary trigger.
+  // selectionchange remains as a secondary trigger.
+  let timer=0;
+  const schedule=()=>{
+    clearTimeout(timer);
+    timer=setTimeout(show,30);
+  };
+  doc.addEventListener("mouseup",schedule,true);
+  doc.addEventListener("touchend",schedule,true);
+  doc.addEventListener("keyup",e=>{
+    if(["Shift","ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) schedule();
+  },true);
+  doc.addEventListener("selectionchange",schedule,true);
 
-  bubble.addEventListener("mousedown",e=>e.preventDefault());
-
-  function selectedTextNodes(range){
+  function nodesForRange(range){
     const walker=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT);
-    const nodes=[];
+    const arr=[];
     while(walker.nextNode()){
       const n=walker.currentNode;
       if(!n.nodeValue || !n.nodeValue.trim()) continue;
       if(n.parentElement?.closest("script,style,.mark-bubble")) continue;
-      try{ if(range.intersectsNode(n)) nodes.push(n); }catch(e){}
+      try{if(range.intersectsNode(n))arr.push(n)}catch(e){}
     }
-    return nodes;
+    return arr;
   }
 
-  function applyMark(range,color){
-    const nodes=selectedTextNodes(range);
-    if(!nodes.length) return false;
-
-    let changed=false;
+  function apply(range,color){
+    const nodes=nodesForRange(range);
+    if(!nodes.length)return false;
+    let ok=false;
     nodes.forEach(n=>{
-      let a=0,b=n.nodeValue.length;
-      if(n===range.startContainer) a=range.startOffset;
-      if(n===range.endContainer) b=range.endOffset;
-
-      // If selection endpoint is the parent element, infer the full text node.
-      if(range.startContainer===n.parentNode) a=0;
-      if(range.endContainer===n.parentNode) b=n.nodeValue.length;
-
+      let a=n===range.startContainer?range.startOffset:0;
+      let b=n===range.endContainer?range.endOffset:n.nodeValue.length;
       a=Math.max(0,Math.min(a,n.nodeValue.length));
       b=Math.max(0,Math.min(b,n.nodeValue.length));
-      if(a>=b) return;
+      if(a>=b)return;
 
-      const frag=doc.createDocumentFragment();
-      if(a) frag.appendChild(doc.createTextNode(n.nodeValue.slice(0,a)));
-
+      const f=doc.createDocumentFragment();
+      if(a)f.appendChild(doc.createTextNode(n.nodeValue.slice(0,a)));
       const span=doc.createElement("span");
       span.className="user-mark mark-"+color;
       span.dataset.markColor=color;
       span.textContent=n.nodeValue.slice(a,b);
-      frag.appendChild(span);
-
-      if(b<n.nodeValue.length) frag.appendChild(doc.createTextNode(n.nodeValue.slice(b)));
-      n.parentNode.replaceChild(frag,n);
-      changed=true;
+      f.appendChild(span);
+      if(b<n.nodeValue.length)f.appendChild(doc.createTextNode(n.nodeValue.slice(b)));
+      n.parentNode.replaceChild(f,n);
+      ok=true;
     });
-    return changed;
+    return ok;
   }
 
+  bubble.addEventListener("mousedown",e=>e.preventDefault());
   bubble.addEventListener("click",e=>{
     const btn=e.target.closest("button");
-    if(!btn || !pendingRange) return;
-
-    const color=btn.dataset.c;
-    markColor=color;
-    localStorage.setItem("reader-mark-color",color);
-    syncPalette();
-
-    const range=pendingRange.cloneRange();
-    const text=pendingText;
-
-    if(applyMark(range,color)){
-      marks.push({text,color,at:Date.now()});
+    if(!btn || !pendingRange)return;
+    markColor=btn.dataset.c;
+    localStorage.setItem("reader-mark-color",markColor);
+    sync();
+    if(apply(pendingRange.cloneRange(),markColor)){
+      marks.push({text:pendingRange.toString(),color:markColor,at:Date.now()});
       marks=marks.slice(-1000);
       localStorage.setItem("reader-marks-v34",JSON.stringify(marks));
       toast("Marked");
-    }else{
-      toast("Could not mark the selection");
     }
-
-    doc.defaultView.getSelection()?.removeAllRanges();
-    hidePalette();
+    win.getSelection()?.removeAllRanges();
+    hide();
   });
 
   doc.addEventListener("mousedown",e=>{
-    if(!bubble.contains(e.target)) hidePalette();
-  });
+    if(!bubble.contains(e.target)) hide();
+  },true);
 }
+
 
 
 

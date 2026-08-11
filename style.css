@@ -52,3 +52,7 @@ body.dark{--bg:#20211f;--panel:#292a27;--text:#e8e5dc;--muted:#aaa;--line:#44443
 .mark-bubble.hidden{display:none!important}
 .mark-bubble button{width:32px!important;height:32px!important;border:0!important;border-radius:8px!important;cursor:pointer!important;font-size:16px!important;background:#f7f5f0!important}
 .mark-bubble button.active-mark{outline:2px solid #6f685d!important;outline-offset:1px!important}
+
+.margin-menu{position:fixed;z-index:80;display:flex;gap:6px;padding:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.14)}
+.margin-menu button{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:7px;padding:7px 10px;cursor:pointer}
+.margin-menu button.active{outline:2px solid #8e8578}
