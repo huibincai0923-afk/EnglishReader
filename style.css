@@ -57,9 +57,9 @@ body.dark{--bg:#20211f;--panel:#292a27;--text:#e8e5dc;--muted:#aaa;--line:#44443
 .margin-menu button{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:7px;padding:7px 10px;cursor:pointer}
 .margin-menu button.active{outline:2px solid #8e8578}
 
-/* V4.6 */
+/* V5 CFI marking palette */
+.v5-mark-palette{position:fixed;z-index:2147483647;display:flex;gap:5px;padding:7px;background:#fffdf8;border:1px solid #d8d1c5;border-radius:11px;box-shadow:0 6px 24px rgba(70,60,50,.16)}
+.v5-mark-palette.hidden{display:none!important}
+.v5-mark-palette button{width:34px;height:34px;border:0;border-radius:9px;background:#f6f1e8;cursor:pointer;font-size:17px;line-height:1}
+.v5-mark-palette button.active{outline:2px solid #81786d;outline-offset:1px}
 body,#viewer{background:#f5f0e6!important}
-.mark-bubble{position:fixed!important;z-index:2147483647!important;display:flex!important;gap:4px!important;padding:6px!important;background:#fffdf8!important;border:1px solid #d8d1c5!important;border-radius:10px!important;box-shadow:0 5px 20px rgba(70,60,50,.16)!important}
-.mark-bubble.hidden{display:none!important}
-.mark-bubble button{width:32px!important;height:32px!important;border:0!important;border-radius:8px!important;background:#f6f1e8!important;cursor:pointer!important;font-size:16px!important}
-.mark-bubble button.active-mark{outline:2px solid #81786d!important;outline-offset:1px!important}

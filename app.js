@@ -236,21 +236,33 @@ syncMarginMenu();
 applyReaderMargin();
 
 
-function installEpubVisualStyles(doc){
-  if(!doc?.head) return;
-  if(doc.getElementById("english-reader-v46-styles")) return;
-  const st=doc.createElement("style");
-  st.id="english-reader-v46-styles";
-  st.textContent=`
-    html, body { background: #f5f0e6 !important; }
-    .user-mark { padding-bottom: 1px !important; text-decoration: none !important; }
-    .user-mark.mark-red { border-bottom: 3px solid #c98b8b !important; }
-    .user-mark.mark-yellow { border-bottom: 3px solid #d5c58b !important; }
-    .user-mark.mark-blue { border-bottom: 3px solid #8eabc0 !important; }
-    .user-mark.mark-purple { border-bottom: 3px solid #a694b8 !important; }
-    .user-mark.mark-green { border-bottom: 3px solid #8eaa8e !important; }
-  `;
-  doc.head.appendChild(st);
+function restoreV5Marks(){
+  if(!book?.rendition)return;
+  let saved=[];
+  try{saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]")}catch(e){}
+  saved.forEach(m=>{
+    if(!m.cfi || !m.color)return;
+    const colors={
+      red:"#c98b8b",yellow:"#d5c58b",blue:"#8eabc0",
+      purple:"#a694b8",green:"#8eaa8e"
+    };
+    try{
+      book.rendition.annotations.add(
+        "underline",m.cfi,{},null,"v5-mark-"+m.color,
+        {color:colors[m.color]||colors.yellow,"stroke-width":"3","stroke-linecap":"round"}
+      );
+    }catch(e){}
+  });
+}
+
+
+function installV5EpubStyles(view){
+  const d=view?.document;
+  if(!d?.head || d.getElementById("v5-epub-styles"))return;
+  const st=d.createElement("style");
+  st.id="v5-epub-styles";
+  st.textContent="html,body{background:#f5f0e6!important;}";
+  d.head.appendChild(st);
 }
 
 async function openBook(file){
@@ -260,7 +272,7 @@ async function openBook(file){
   $("viewer").innerHTML="";
   rendition=book.renderTo("viewer",{width:"100%",height:"auto",spread:"none",flow:"scrolled-doc"});
   rendition.themes.default({
-    body:{color:"inherit !important",background:"#f5f0e6 !important",fontFamily:"Georgia,serif",fontSize:fs+"px",lineHeight:"1.8",padding:"0 7% !important"},
+    body:{color:"inherit !important",background:"transparent !important",fontFamily:"Georgia,serif",fontSize:fs+"px",lineHeight:"1.8",padding:"0 7% !important"},
     ".reader-word":{background:"#fff2b8",borderRadius:"3px",cursor:"pointer",padding:"0 2px"},
     ".reader-phrase":{background:"#dceeff",borderRadius:"3px",cursor:"pointer",padding:"0 2px"},
     ".user-mark":{paddingBottom:"1px"},
@@ -271,7 +283,7 @@ async function openBook(file){
     ".user-mark.mark-green":{borderBottom:"3px solid #8eaa8e !important"}
   });
   rendition.on("rendered",(_,view)=>setTimeout(()=>{
-    installEpubVisualStyles(view.document);decorate(view.document);restoreMarks(view.document);installMarking(view);
+    decorate(view.document);restoreMarks(view.document);installMarking(view);
   },40));
   rendition.on("relocated",loc=>{
     if(loc?.start){
@@ -405,137 +417,163 @@ function showWord(kind,key){
 
 function installMarking(view){
   const doc=view?.document, win=doc?.defaultView;
-  if(!doc || !win) return;
-  installEpubVisualStyles(doc);
-  if(doc.__markInstalled) return;
-  doc.__markInstalled=true;
+  if(!doc || !win || !book?.rendition) return;
+  if(view.__v5MarkingInstalled) return;
+  view.__v5MarkingInstalled=true;
 
-  const bubble=doc.createElement("div");
-  bubble.className="mark-bubble hidden";
-  bubble.innerHTML=
+  const rendition=book.rendition;
+  const palette=document.createElement("div");
+  palette.className="v5-mark-palette hidden";
+  palette.innerHTML=
     '<button data-c="red" title="Red">❤️</button>'+
     '<button data-c="yellow" title="Yellow">🧡</button>'+
     '<button data-c="blue" title="Blue">💙</button>'+
     '<button data-c="purple" title="Purple">💜</button>'+
     '<button data-c="green" title="Green">💚</button>';
-  Object.assign(bubble.style,{position:"fixed",zIndex:"2147483647"});
-  doc.body.appendChild(bubble);
+  document.body.appendChild(palette);
 
-  let pendingRange=null;
+  let pendingCfi=null;
+  let pendingText="";
 
-  function syncPalette(){
-    bubble.querySelectorAll("button").forEach(b=>{
-      b.classList.toggle("active-mark",b.dataset.c===markColor);
+  function sync(){
+    palette.querySelectorAll("button").forEach(b=>{
+      b.classList.toggle("active",b.dataset.c===markColor);
     });
   }
-  function hidePalette(){
-    bubble.classList.add("hidden");
-    pendingRange=null;
+  function hide(){
+    palette.classList.add("hidden");
+    pendingCfi=null;
+    pendingText="";
   }
-  function getSelectionRange(){
+
+  function showFromSelection(){
     const sel=win.getSelection();
-    if(!sel || sel.rangeCount===0 || sel.isCollapsed) return null;
+    if(!sel || sel.rangeCount===0 || sel.isCollapsed) return;
     const text=sel.toString().replace(/\s+/g," ").trim();
-    if(!text) return null;
-    const r=sel.getRangeAt(0);
-    if(!doc.body.contains(r.commonAncestorContainer)) return null;
-    return r.cloneRange();
-  }
-  function showPalette(){
-    const r=getSelectionRange();
-    if(!r)return;
-    pendingRange=r;
-    syncPalette();
-    bubble.classList.remove("hidden");
-    requestAnimationFrame(()=>{
-      const rect=r.getBoundingClientRect();
-      const w=bubble.offsetWidth||190,h=bubble.offsetHeight||44;
-      bubble.style.left=Math.max(8,Math.min(win.innerWidth-w-8,rect.left+rect.width/2-w/2))+"px";
-      bubble.style.top=Math.max(8,rect.top-h-10)+"px";
-    });
+    if(!text) return;
+
+    const range=sel.getRangeAt(0);
+    if(!doc.body.contains(range.commonAncestorContainer)) return;
+
+    let cfi;
+    try{
+      cfi=rendition.getCfiFromRange(range);
+    }catch(e){
+      return;
+    }
+    if(!cfi) return;
+
+    pendingCfi=cfi;
+    pendingText=text;
+    sync();
+    palette.classList.remove("hidden");
+
+    const rect=range.getBoundingClientRect();
+    const pr=palette.getBoundingClientRect();
+    let left=rect.left+rect.width/2-pr.width/2;
+    let top=rect.top-pr.height-10;
+
+    // Convert iframe coordinates to top-level viewport coordinates.
+    const frame=view.window?.frameElement;
+    if(frame){
+      const fr=frame.getBoundingClientRect();
+      left += fr.left;
+      top += fr.top;
+    }
+    left=Math.max(8,Math.min(window.innerWidth-pr.width-8,left));
+    top=Math.max(8,top);
+    palette.style.left=left+"px";
+    palette.style.top=top+"px";
   }
 
-  // mouseup is the primary trigger; selectionchange is only a backup.
-  let selectionTimer=0;
+  let timer=0;
   const schedule=()=>{
-    clearTimeout(selectionTimer);
-    selectionTimer=setTimeout(showPalette,60);
+    clearTimeout(timer);
+    timer=setTimeout(showFromSelection,50);
   };
   doc.addEventListener("mouseup",schedule,true);
   doc.addEventListener("touchend",schedule,true);
   doc.addEventListener("selectionchange",schedule,true);
 
-  function getSelectedTextNodes(range){
-    const walker=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT);
-    const nodes=[];
-    while(walker.nextNode()){
-      const n=walker.currentNode;
-      if(!n.nodeValue || !n.nodeValue.trim())continue;
-      if(n.parentElement?.closest("script,style,.mark-bubble"))continue;
-      try{if(range.intersectsNode(n))nodes.push(n)}catch(e){}
-    }
-    return nodes;
-  }
+  function addAnnotation(color){
+    if(!pendingCfi)return;
 
-  function applyMark(range,color){
-    const nodes=getSelectedTextNodes(range);
-    if(!nodes.length)return false;
-    let changed=false;
+    const className="v5-mark-"+color;
+    const styles={
+      red:{color:"#c98b8b"},
+      yellow:{color:"#d5c58b"},
+      blue:{color:"#8eabc0"},
+      purple:{color:"#a694b8"},
+      green:{color:"#8eaa8e"}
+    };
+    const style=styles[color]||styles.yellow;
 
-    nodes.forEach(n=>{
-      let start=0,end=n.nodeValue.length;
-      if(n===range.startContainer)start=range.startOffset;
-      if(n===range.endContainer)end=range.endOffset;
-      // If the selection endpoint is an element, include the relevant text node.
-      if(range.startContainer===n.parentNode)start=0;
-      if(range.endContainer===n.parentNode)end=n.nodeValue.length;
+    try{
+      rendition.annotations.remove(pendingCfi,"underline");
+    }catch(e){}
 
-      start=Math.max(0,Math.min(start,n.nodeValue.length));
-      end=Math.max(0,Math.min(end,n.nodeValue.length));
-      if(start>=end)return;
+    rendition.annotations.add(
+      "underline",
+      pendingCfi,
+      {},
+      null,
+      "v5-mark-"+color,
+      {color:style.color, "stroke-width":"3", "stroke-linecap":"round"}
+    );
 
-      const frag=doc.createDocumentFragment();
-      if(start)frag.appendChild(doc.createTextNode(n.nodeValue.slice(0,start)));
-
-      const mark=doc.createElement("span");
-      mark.className="user-mark mark-"+color;
-      mark.dataset.markColor=color;
-      mark.textContent=n.nodeValue.slice(start,end);
-      frag.appendChild(mark);
-
-      if(end<n.nodeValue.length)frag.appendChild(doc.createTextNode(n.nodeValue.slice(end)));
-      n.parentNode.replaceChild(frag,n);
-      changed=true;
-    });
-    return changed;
-  }
-
-  bubble.addEventListener("mousedown",e=>e.preventDefault());
-  bubble.addEventListener("click",e=>{
-    const btn=e.target.closest("button");
-    if(!btn || !pendingRange)return;
-
-    const color=btn.dataset.c;
-    const selectedText=pendingRange.toString().replace(/\s+/g," ").trim();
     markColor=color;
     localStorage.setItem("reader-mark-color",color);
-    syncPalette();
 
-    if(applyMark(pendingRange.cloneRange(),color)){
-      marks.push({text:selectedText,color,at:Date.now()});
-      marks=marks.slice(-1000);
-      localStorage.setItem("reader-marks-v34",JSON.stringify(marks));
-      toast("Marked");
-    }else{
-      toast("Could not mark the selection");
+    marks.push({
+      text:pendingText,
+      color,
+      cfi:pendingCfi,
+      at:Date.now()
+    });
+    marks=marks.slice(-2000);
+    localStorage.setItem("reader-marks-v5",JSON.stringify(marks));
+
+    // Keep the existing optional vocabulary behavior, but marking itself
+    // never depends on vocabulary membership.
+    const normalized=pendingText.toLowerCase();
+    let vocabItem=null;
+    if(DATA?.words){
+      const key=Object.keys(DATA.words).find(k=>k.toLowerCase()===normalized);
+      if(key){
+        const d=DATA.words[key];
+        vocabItem={text:key,kind:"word",cefr:d.cefr,meaning:d.meaning,addedAt:Date.now()};
+      }
+    }
+    if(!vocabItem && DATA?.phrases){
+      const key=Object.keys(DATA.phrases).find(k=>k.toLowerCase()===normalized);
+      if(key){
+        const d=DATA.phrases[key];
+        vocabItem={text:key,kind:"phrase",cefr:d.cefr,meaning:d.meaning,addedAt:Date.now()};
+      }
+    }
+    if(vocabItem){
+      vocab=JSON.parse(localStorage.getItem("reader-vocab")||"[]");
+      if(!vocab.some(x=>x.text.toLowerCase()===vocabItem.text.toLowerCase())){
+        vocab.push(vocabItem);
+        localStorage.setItem("reader-vocab",JSON.stringify(vocab));
+      }
     }
 
-    win.getSelection()?.removeAllRanges();
-    hidePalette();
+    toast(vocabItem?"Marked · added to Vocabulary":"Marked");
+    try{win.getSelection()?.removeAllRanges()}catch(e){}
+    hide();
+  }
+
+  palette.addEventListener("click",e=>{
+    const btn=e.target.closest("button");
+    if(!btn)return;
+    e.preventDefault();
+    e.stopPropagation();
+    addAnnotation(btn.dataset.c);
   });
 
-  doc.addEventListener("mousedown",e=>{
-    if(!bubble.contains(e.target))hidePalette();
+  document.addEventListener("mousedown",e=>{
+    if(!palette.contains(e.target)) hide();
   },true);
 }
 

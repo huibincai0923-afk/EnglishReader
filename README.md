@@ -69,10 +69,10 @@ The included vocabulary file is a starter CEFR-oriented dataset. It does not red
 - Ordinary sentence/paragraph marking remains a marking-only action.
 
 
-## V4.6 — Stable Marking + Existing Features Preserved
-- Manual marking is independent of B2+/C1 vocabulary.
-- No paragraph-length restriction.
+## V5 — CFI Marking
+- Replaced manual text marking with EPUB.js CFI-based annotations.
+- Selection can be any text; it is not restricted to one paragraph or vocabulary level.
 - Five heart buttons: ❤️ 🧡 💙 💜 💚.
-- Underlines are styled inside the EPUB iframe itself.
-- B2+/C1 vocabulary highlighting, Vocabulary, Notes, reading-time statistics, finished-book list, and margin controls are preserved from V4.4.
-- Reading background is soft ivory.
+- The last selected color is remembered.
+- Marks are stored by EPUB CFI and restored after navigation/reopening.
+- Existing Vocabulary, notes, reading statistics, finished books, vocabulary highlighting, and margin controls are preserved from V4.4.
