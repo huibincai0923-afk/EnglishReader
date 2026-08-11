@@ -24,6 +24,9 @@
     <option value="42">42px</option>
   </select>
   <button id="fontDown" class="control">A−</button><button id="fontUp" class="control">A+</button>
+  <button id="openVocab" class="control">📚 Vocabulary</button>
+  <button id="openNotes" class="control">📝 Notes</button>
+  <button id="openStats" class="control">📊 Reading</button>
   <button id="theme" class="control">🌙</button>
 </header>
 
@@ -59,6 +62,13 @@
   <div class="popup-actions"><button id="save">⭐ Add to vocabulary</button></div>
 </div>
 <div id="toast" class="toast hidden"></div>
-<script src="app.js"></script>
+
+<div id="drawer" class="drawer hidden">
+  <div class="drawer-head">
+    <b id="drawerTitle">Vocabulary</b><button id="drawerClose">×</button>
+  </div>
+  <div id="drawerBody" class="drawer-body"></div>
+</div>
+<script src="app.js?v=41"></script>
 </body>
 </html>
