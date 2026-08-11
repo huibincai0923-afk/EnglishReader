@@ -244,7 +244,13 @@ async function openBook(file){
   rendition.themes.default({
     body:{color:"inherit !important",background:"transparent !important",fontFamily:"Georgia,serif",fontSize:fs+"px",lineHeight:"1.8",padding:"0 7% !important"},
     ".reader-word":{background:"#fff2b8",borderRadius:"3px",cursor:"pointer",padding:"0 2px"},
-    ".reader-phrase":{background:"#dceeff",borderRadius:"3px",cursor:"pointer",padding:"0 2px"}
+    ".reader-phrase":{background:"#dceeff",borderRadius:"3px",cursor:"pointer",padding:"0 2px"},
+    ".user-mark":{paddingBottom:"1px"},
+    ".user-mark.mark-red":{borderBottom:"3px solid #c98b8b !important"},
+    ".user-mark.mark-yellow":{borderBottom:"3px solid #d5c58b !important"},
+    ".user-mark.mark-blue":{borderBottom:"3px solid #8eabc0 !important"},
+    ".user-mark.mark-purple":{borderBottom:"3px solid #a694b8 !important"},
+    ".user-mark.mark-green":{borderBottom:"3px solid #8eaa8e !important"}
   });
   rendition.on("rendered",(_,view)=>setTimeout(()=>{
     decorate(view.document);restoreMarks(view.document);installMarking(view);
@@ -294,16 +300,20 @@ function allowed(level){
 function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}
 
 
+
 function decorate(doc){
   if(!doc?.body) return;
 
-  // Only decorate plain text nodes. Existing vocabulary spans and user marks are skipped.
-  const phraseKeys=Object.keys(DATA.phrases)
+  // System highlights are independent from manual marking.
+  // B2+/C1 words are soft yellow; B2+/C1 phrases are soft blue.
+  const phraseKeys=Object.keys(DATA?.phrases||{})
     .filter(k=>allowed(DATA.phrases[k].cefr))
     .sort((a,b)=>b.length-a.length);
-  const wordKeys=Object.keys(DATA.words)
+  const wordKeys=Object.keys(DATA?.words||{})
     .filter(k=>allowed(DATA.words[k].cefr))
     .sort((a,b)=>b.length-a.length);
+
+  if(!phraseKeys.length && !wordKeys.length) return;
 
   const walker=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT);
   const nodes=[];
@@ -311,59 +321,67 @@ function decorate(doc){
 
   nodes.forEach(n=>{
     if(!n.nodeValue.trim()) return;
-    if(n.parentElement?.closest(".reader-word,.reader-phrase,.user-mark,script,style")) return;
+    if(n.parentElement?.closest(
+      ".reader-word,.reader-phrase,.user-mark,script,style,.mark-bubble"
+    )) return;
 
-    const source=n.nodeValue;
+    const text=n.nodeValue;
     const matches=[];
 
-    phraseKeys.forEach(key=>{
-      const re=new RegExp("\\b"+esc(key).replace(/\\ /g,"\\s+")+"\\b","gi");
+    for(const key of phraseKeys){
+      const escaped=esc(key).replace(/\\ /g,"\\s+");
+      const re=new RegExp("\\b"+escaped+"\\b","gi");
       let m;
-      while((m=re.exec(source))){
-        matches.push({i:m.index,j:m.index+m[0].length,key,mkind:"phrase"});
-      }
-    });
+      while((m=re.exec(text))) matches.push({
+        start:m.index,end:m.index+m[0].length,key,type:"phrase"
+      });
+    }
 
-    wordKeys.forEach(key=>{
+    for(const key of wordKeys){
       const re=new RegExp("\\b"+esc(key)+"\\b","gi");
       let m;
-      while((m=re.exec(source))){
-        matches.push({i:m.index,j:m.index+m[0].length,key,mkind:"word"});
-      }
+      while((m=re.exec(text))) matches.push({
+        start:m.index,end:m.index+m[0].length,key,type:"word"
+      });
+    }
+
+    // Longest match wins; phrase wins over a word inside the phrase.
+    matches.sort((a,b)=>{
+      if(a.start!==b.start) return a.start-b.start;
+      return (b.end-b.start)-(a.end-a.start);
     });
 
-    matches.sort((a,b)=>a.i-b.i || (b.j-b.i)-(a.j-a.i));
-
-    // Longest/first match wins. This prevents phrase and word highlights from overlapping.
-    const picked=[];
+    const selected=[];
     let cursor=0;
     for(const m of matches){
-      if(m.i<cursor) continue;
-      picked.push(m);
-      cursor=m.j;
+      if(m.start<cursor) continue;
+      selected.push(m);
+      cursor=m.end;
     }
-    if(!picked.length) return;
+    if(!selected.length) return;
 
     const frag=doc.createDocumentFragment();
     let last=0;
-    picked.forEach(m=>{
-      if(m.i>last) frag.appendChild(doc.createTextNode(source.slice(last,m.i)));
+    for(const m of selected){
+      if(m.start>last) frag.appendChild(doc.createTextNode(text.slice(last,m.start)));
+
       const span=doc.createElement("span");
-      span.className=m.mkind==="phrase"?"reader-phrase":"reader-word";
-      span.textContent=source.slice(m.i,m.j);
+      span.className=m.type==="phrase"?"reader-phrase":"reader-word";
       span.dataset.lookupKey=m.key;
+      span.dataset.cefr=(m.type==="phrase"?DATA.phrases[m.key]:DATA.words[m.key]).cefr;
+      span.textContent=text.slice(m.start,m.end);
       span.addEventListener("click",e=>{
-        // A click without a selection opens the vocabulary definition.
         const sel=doc.defaultView.getSelection();
-        if(!sel || sel.isCollapsed) showWord(m.mkind,m.key);
+        if(!sel || sel.isCollapsed) showWord(m.type,m.key);
       });
       frag.appendChild(span);
-      last=m.j;
-    });
-    if(last<source.length) frag.appendChild(doc.createTextNode(source.slice(last)));
+      last=m.end;
+    }
+    if(last<text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
     n.parentNode.replaceChild(frag,n);
   });
 }
+
 
 
 function showWord(kind,key){
@@ -500,11 +518,40 @@ function installMarking(view){
     markColor=btn.dataset.c;
     localStorage.setItem("reader-mark-color",markColor);
     sync();
+    const selectedText=pendingRange.toString().replace(/\s+/g," ").trim();
     if(apply(pendingRange.cloneRange(),markColor)){
-      marks.push({text:pendingRange.toString(),color:markColor,at:Date.now()});
+      marks.push({text:selectedText,color:markColor,at:Date.now()});
       marks=marks.slice(-1000);
       localStorage.setItem("reader-marks-v34",JSON.stringify(marks));
-      toast("Marked");
+
+      // If the selected text is one of our B2+/C1 vocabulary entries,
+      // automatically add it to Vocabulary as well.
+      const normalized=selectedText.toLowerCase();
+      let vocabItem=null;
+      if(DATA?.words){
+        const key=Object.keys(DATA.words).find(k=>k.toLowerCase()===normalized);
+        if(key){
+          const d=DATA.words[key];
+          vocabItem={text:key,kind:"word",cefr:d.cefr,meaning:d.meaning,addedAt:Date.now()};
+        }
+      }
+      if(!vocabItem && DATA?.phrases){
+        const key=Object.keys(DATA.phrases).find(k=>k.toLowerCase()===normalized);
+        if(key){
+          const d=DATA.phrases[key];
+          vocabItem={text:key,kind:"phrase",cefr:d.cefr,meaning:d.meaning,addedAt:Date.now()};
+        }
+      }
+      if(vocabItem){
+        vocab=JSON.parse(localStorage.getItem("reader-vocab")||"[]");
+        if(!vocab.some(x=>x.text.toLowerCase()===vocabItem.text.toLowerCase())){
+          vocab.push(vocabItem);
+          localStorage.setItem("reader-vocab",JSON.stringify(vocab));
+        }
+        toast("Marked · added to Vocabulary");
+      }else{
+        toast("Marked");
+      }
     }
     win.getSelection()?.removeAllRanges();
     hide();
@@ -527,7 +574,7 @@ function restoreMarks(doc){
    if(hits.length!==1)return;
    const n=hits[0],i=n.nodeValue.indexOf(m.text),f=doc.createDocumentFragment();
    if(i)f.appendChild(doc.createTextNode(n.nodeValue.slice(0,i)));
-   const span=doc.createElement("span");span.className="user-mark mark-"+m.color;span.textContent=m.text;f.appendChild(span);
+   const span=doc.createElement("span");span.className="user-mark mark-"+m.color;span.dataset.markColor=m.color;span.textContent=m.text;f.appendChild(span);
    if(i+m.text.length<n.nodeValue.length)f.appendChild(doc.createTextNode(n.nodeValue.slice(i+m.text.length)));
    n.parentNode.replaceChild(f,n);
  });
