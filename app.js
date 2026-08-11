@@ -9,7 +9,7 @@ let lastActivity=0;
 let timerInterval=null;
 let activeBookId="";
 let library=JSON.parse(localStorage.getItem("reader-library")||"[]");
-let marks=JSON.parse(localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks")||"[]");
+let marks=JSON.parse(localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks")||"[]");
 
 const $=id=>document.getElementById(id);
 fetch("vocabulary.json").then(r=>r.json()).then(d=>{
@@ -239,32 +239,78 @@ function allowed(level){
 }
 function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}
 
+
 function decorate(doc){
- if(!doc?.body)return;
- const phraseKeys=Object.keys(DATA.phrases).filter(k=>allowed(DATA.phrases[k].cefr)).sort((a,b)=>b.length-a.length);
- const wordKeys=Object.keys(DATA.words).filter(k=>allowed(DATA.words[k].cefr)).sort((a,b)=>b.length-a.length);
- const walker=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT),nodes=[];
- while(walker.nextNode())nodes.push(walker.currentNode);
- nodes.forEach(n=>{
-   if(!n.nodeValue.trim()||n.parentElement?.closest(".reader-word,.reader-phrase,.user-mark,script,style"))return;
-   const source=n.nodeValue,all=[];
-   phraseKeys.forEach(k=>{const r=new RegExp("\\b"+esc(k).replace(/\\ /g,"\\s+")+"\\b","gi");let m;while((m=r.exec(source)))all.push({i:m.index,j:m.index+m[0].length,text:m[0],kind:"phrase",key:k})});
-   wordKeys.forEach(k=>{const r=new RegExp("\\b"+esc(k)+"\\b","gi");let m;while((m=r.exec(source)))all.push({i:m.index,j:m.index+m[0].length,text:m[0],kind:"word",key:k})});
-   all.sort((a,b)=>a.i-b.i||b.j-a.j);
-   const picked=[];let end=-1;
-   for(const x of all)if(x.i>=end){picked.push(x);end=x.j}
-   if(!picked.length)return;
-   const f=doc.createDocumentFragment();let last=0;
-   picked.forEach(x=>{
-     f.appendChild(doc.createTextNode(source.slice(last,x.i)));
-     const span=doc.createElement("span");
-     span.className=x.kind==="phrase"?"reader-phrase":"reader-word";span.textContent=x.text;
-     span.addEventListener("click",()=>showWord(x.kind,x.key));
-     f.appendChild(span);last=x.j;
-   });
-   f.appendChild(doc.createTextNode(source.slice(last)));n.parentNode.replaceChild(f,n);
- });
+  if(!doc?.body) return;
+
+  // Only decorate plain text nodes. Existing vocabulary spans and user marks are skipped.
+  const phraseKeys=Object.keys(DATA.phrases)
+    .filter(k=>allowed(DATA.phrases[k].cefr))
+    .sort((a,b)=>b.length-a.length);
+  const wordKeys=Object.keys(DATA.words)
+    .filter(k=>allowed(DATA.words[k].cefr))
+    .sort((a,b)=>b.length-a.length);
+
+  const walker=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT);
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(n=>{
+    if(!n.nodeValue.trim()) return;
+    if(n.parentElement?.closest(".reader-word,.reader-phrase,.user-mark,script,style")) return;
+
+    const source=n.nodeValue;
+    const matches=[];
+
+    phraseKeys.forEach(key=>{
+      const re=new RegExp("\\b"+esc(key).replace(/\\ /g,"\\s+")+"\\b","gi");
+      let m;
+      while((m=re.exec(source))){
+        matches.push({i:m.index,j:m.index+m[0].length,key,mkind:"phrase"});
+      }
+    });
+
+    wordKeys.forEach(key=>{
+      const re=new RegExp("\\b"+esc(key)+"\\b","gi");
+      let m;
+      while((m=re.exec(source))){
+        matches.push({i:m.index,j:m.index+m[0].length,key,mkind:"word"});
+      }
+    });
+
+    matches.sort((a,b)=>a.i-b.i || (b.j-b.i)-(a.j-a.i));
+
+    // Longest/first match wins. This prevents phrase and word highlights from overlapping.
+    const picked=[];
+    let cursor=0;
+    for(const m of matches){
+      if(m.i<cursor) continue;
+      picked.push(m);
+      cursor=m.j;
+    }
+    if(!picked.length) return;
+
+    const frag=doc.createDocumentFragment();
+    let last=0;
+    picked.forEach(m=>{
+      if(m.i>last) frag.appendChild(doc.createTextNode(source.slice(last,m.i)));
+      const span=doc.createElement("span");
+      span.className=m.mkind==="phrase"?"reader-phrase":"reader-word";
+      span.textContent=source.slice(m.i,m.j);
+      span.dataset.lookupKey=m.key;
+      span.addEventListener("click",e=>{
+        // A click without a selection opens the vocabulary definition.
+        const sel=doc.defaultView.getSelection();
+        if(!sel || sel.isCollapsed) showWord(m.mkind,m.key);
+      });
+      frag.appendChild(span);
+      last=m.j;
+    });
+    if(last<source.length) frag.appendChild(doc.createTextNode(source.slice(last)));
+    n.parentNode.replaceChild(frag,n);
+  });
 }
+
 
 function showWord(kind,key){
  const d=DATA[kind==="word"?"words":"phrases"][key];
@@ -276,13 +322,12 @@ function showWord(kind,key){
 }
 
 
+
 function installMarking(view){
   const doc=view?.document;
   if(!doc || doc.__markInstalled) return;
   doc.__markInstalled=true;
 
-  // The toolbar lives inside the EPUB iframe, so it stays aligned with
-  // the selection and never depends on the outer page's coordinates.
   const bubble=doc.createElement("div");
   bubble.className="mark-bubble hidden";
   bubble.innerHTML=
@@ -295,29 +340,23 @@ function installMarking(view){
 
   let pendingRange=null;
   let pendingText="";
-  let hideTimer=null;
 
-  const hide=()=>{
+  function syncPalette(){
+    bubble.querySelectorAll("button").forEach(b=>{
+      b.classList.toggle("active-mark",b.dataset.c===markColor);
+    });
+  }
+  syncPalette();
+
+  function hidePalette(){
     bubble.classList.add("hidden");
     pendingRange=null;
     pendingText="";
-  };
-
-  function positionToolbar(range){
-    const rect=range.getBoundingClientRect();
-    const win=doc.defaultView;
-    const maxLeft=Math.max(8,win.innerWidth-bubble.offsetWidth-8);
-    const left=Math.max(8,Math.min(maxLeft,rect.left+(rect.width/2)-bubble.offsetWidth/2));
-    const top=Math.max(8,rect.top-bubble.offsetHeight-10);
-    bubble.style.left=left+"px";
-    bubble.style.top=top+"px";
   }
 
-  function showForSelection(){
+  function showPalette(){
     const sel=doc.defaultView.getSelection();
-    if(!sel || sel.rangeCount===0 || sel.isCollapsed){
-      return;
-    }
+    if(!sel || sel.rangeCount===0 || sel.isCollapsed) return;
     const text=sel.toString().replace(/\s+/g," ").trim();
     if(!text) return;
 
@@ -326,47 +365,45 @@ function installMarking(view){
 
     pendingRange=range.cloneRange();
     pendingText=text;
-
+    syncPalette();
     bubble.classList.remove("hidden");
-    // Wait one frame so offsetWidth/height are real before positioning.
-    requestAnimationFrame(()=>positionToolbar(pendingRange));
+
+    requestAnimationFrame(()=>{
+      const rect=pendingRange.getBoundingClientRect();
+      const win=doc.defaultView;
+      const w=bubble.offsetWidth||190;
+      const h=bubble.offsetHeight||42;
+      bubble.style.left=Math.max(8,Math.min(win.innerWidth-w-8,rect.left+rect.width/2-w/2))+"px";
+      bubble.style.top=Math.max(8,rect.top-h-10)+"px";
+    });
   }
 
-  // selectionchange catches mouse, touchpad and keyboard selections.
+  // selectionchange works for selections spanning multiple text nodes,
+  // including vocabulary-highlight spans.
   doc.addEventListener("selectionchange",()=>{
-    clearTimeout(hideTimer);
-    hideTimer=setTimeout(()=>{
+    clearTimeout(doc.__markTimer);
+    doc.__markTimer=setTimeout(()=>{
       const sel=doc.defaultView.getSelection();
-      if(sel && !sel.isCollapsed && sel.toString().trim()) showForSelection();
-      else hide();
-    },80);
+      if(sel && !sel.isCollapsed && sel.toString().trim()) showPalette();
+    },60);
   });
 
-  doc.addEventListener("scroll",()=>{
-    if(pendingRange && !bubble.classList.contains("hidden")) positionToolbar(pendingRange);
-  });
-
-  // Prevent clicking the palette from replacing the current selection.
   bubble.addEventListener("mousedown",e=>e.preventDefault());
 
-  function collectSelectedTextNodes(range){
+  function selectedTextNodes(range){
     const walker=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT);
     const nodes=[];
     while(walker.nextNode()){
       const n=walker.currentNode;
       if(!n.nodeValue || !n.nodeValue.trim()) continue;
       if(n.parentElement?.closest("script,style,.mark-bubble")) continue;
-      try{
-        if(range.intersectsNode(n)) nodes.push(n);
-      }catch(e){}
+      try{ if(range.intersectsNode(n)) nodes.push(n); }catch(e){}
     }
     return nodes;
   }
 
-  function markRange(range,color){
-    // Never call Range.surroundContents(): that is what caused the old
-    // "one paragraph" limitation. We split text nodes ourselves instead.
-    const nodes=collectSelectedTextNodes(range);
+  function applyMark(range,color){
+    const nodes=selectedTextNodes(range);
     if(!nodes.length) return false;
 
     let changed=false;
@@ -375,13 +412,13 @@ function installMarking(view){
       if(n===range.startContainer) a=range.startOffset;
       if(n===range.endContainer) b=range.endOffset;
 
-      // Defensive handling when the selection endpoint is an element.
-      if(range.startContainer===n.parentNode) a=Math.min(a,n.nodeValue.length);
-      if(range.endContainer===n.parentNode) b=Math.min(b,n.nodeValue.length);
+      // If selection endpoint is the parent element, infer the full text node.
+      if(range.startContainer===n.parentNode) a=0;
+      if(range.endContainer===n.parentNode) b=n.nodeValue.length;
 
-      if(a<0)a=0;
-      if(b>n.nodeValue.length)b=n.nodeValue.length;
-      if(a>=b)return;
+      a=Math.max(0,Math.min(a,n.nodeValue.length));
+      b=Math.max(0,Math.min(b,n.nodeValue.length));
+      if(a>=b) return;
 
       const frag=doc.createDocumentFragment();
       if(a) frag.appendChild(doc.createTextNode(n.nodeValue.slice(0,a)));
@@ -401,14 +438,17 @@ function installMarking(view){
 
   bubble.addEventListener("click",e=>{
     const btn=e.target.closest("button");
-    if(!btn || !pendingRange)return;
+    if(!btn || !pendingRange) return;
 
     const color=btn.dataset.c;
-    setMarkColor(color,false);
-    const text=pendingText;
-    const range=pendingRange.cloneRange();
+    markColor=color;
+    localStorage.setItem("reader-mark-color",color);
+    syncPalette();
 
-    if(markRange(range,color)){
+    const range=pendingRange.cloneRange();
+    const text=pendingText;
+
+    if(applyMark(range,color)){
       marks.push({text,color,at:Date.now()});
       marks=marks.slice(-1000);
       localStorage.setItem("reader-marks-v34",JSON.stringify(marks));
@@ -418,17 +458,18 @@ function installMarking(view){
     }
 
     doc.defaultView.getSelection()?.removeAllRanges();
-    hide();
+    hidePalette();
   });
 
   doc.addEventListener("mousedown",e=>{
-    if(!bubble.contains(e.target)) hide();
+    if(!bubble.contains(e.target)) hidePalette();
   });
 }
 
 
+
 function restoreMarks(doc){
- const saved=JSON.parse(localStorage.getItem("reader-marks")||"[]");if(!saved.length||!doc?.body)return;
+ const saved=JSON.parse(localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks")||"[]");if(!saved.length||!doc?.body)return;
  saved.forEach(m=>{
    if(!m.text||m.text.length<2)return;
    const w=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT),hits=[];

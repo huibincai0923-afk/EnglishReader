@@ -38,3 +38,17 @@ body.dark{--bg:#20211f;--panel:#292a27;--text:#e8e5dc;--muted:#aaa;--line:#44443
 .library-book{padding:13px 0;border-bottom:1px solid var(--line)}.library-title{font-weight:700}.library-meta{font-size:12px;color:var(--muted);margin-top:4px}
 .book-actions{display:flex;gap:7px;margin-top:9px}.book-actions button{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:7px;padding:6px 9px;cursor:pointer}
 .progress-mini{height:5px;background:#e5e2dc;border-radius:99px;margin-top:8px;overflow:hidden}.progress-mini span{display:block;height:100%;background:#a69a87}
+
+/* V4.2 reading highlights */
+.reader-word{background:#fff1b5!important;border-radius:3px;padding:0 2px;cursor:pointer}
+.reader-phrase{background:#d9ecfa!important;border-radius:3px;padding:0 2px;cursor:pointer}
+.user-mark{padding-bottom:1px}
+.user-mark.mark-red{border-bottom:3px solid #c98b8b!important}
+.user-mark.mark-yellow{border-bottom:3px solid #d5c58b!important}
+.user-mark.mark-blue{border-bottom:3px solid #8eabc0!important}
+.user-mark.mark-purple{border-bottom:3px solid #a694b8!important}
+.user-mark.mark-green{border-bottom:3px solid #8eaa8e!important}
+.mark-bubble{position:absolute!important;z-index:99999!important;display:flex!important;gap:4px!important;padding:6px!important;background:rgba(255,255,255,.98)!important;border:1px solid #ddd!important;border-radius:10px!important;box-shadow:0 5px 20px rgba(0,0,0,.16)!important}
+.mark-bubble.hidden{display:none!important}
+.mark-bubble button{width:32px!important;height:32px!important;border:0!important;border-radius:8px!important;cursor:pointer!important;font-size:16px!important;background:#f7f5f0!important}
+.mark-bubble button.active-mark{outline:2px solid #6f685d!important;outline-offset:1px!important}
