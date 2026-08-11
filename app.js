@@ -7,7 +7,7 @@ $("fontUp").onclick=()=>rendition?.themes.fontSize("115%");$("fontDown").onclick
 $("theme").onclick=()=>{document.body.classList.toggle("dark");localStorage.setItem("reader-dark",document.body.classList.contains("dark"))};
 if(localStorage.getItem("reader-dark")==="true")document.body.classList.add("dark");
 async function openBook(file){try{
-const url=URL.createObjectURL(file);book=ePub(url);rendition=book.renderTo("viewer",{width:"100%",height:"100%",spread:"none"});
+const buffer=await file.arrayBuffer();book=ePub(buffer);rendition=book.renderTo("viewer",{width:"100%",height:"100%",spread:"none"});
 rendition.themes.default({body:{color:"inherit !important",background:"transparent !important",fontFamily:"Georgia,serif",lineHeight:"1.75",padding:"0 8% !important"},".reader-vocab":{background:"rgba(255,230,90,.55)",borderRadius:"3px",cursor:"pointer"}});
 rendition.on("rendered",(_s,v)=>{try{highlight(v.document)}catch(e){console.warn(e)}});
 rendition.on("relocated",loc=>{if(loc?.start){localStorage.setItem("reader-cfi",loc.start.cfi);updateProgress(loc)}});
