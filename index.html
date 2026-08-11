@@ -1,7 +1,20 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>English Reader</title><link rel="stylesheet" href="style.css"></head><body>
-<header><b>📚 English Reader <small>V2</small></b><div><label class="btn primary">Add EPUB<input id="epubInput" type="file" accept=".epub" hidden></label><button id="fontDown" class="btn">A−</button><button id="fontUp" class="btn">A+</button><button id="theme" class="btn">🌙</button></div></header>
-<div class="layout"><aside><div class="book"><div class="cover">📖</div><div><b id="bookTitle">No book loaded</b><small id="bookAuthor">Import an EPUB to begin</small></div></div><div class="progressRow"><span>Progress</span><span id="progress">0%</span></div><div class="progress"><div id="progressFill"></div></div><h3>Table of Contents</h3><div id="toc" class="toc"><small>Your chapters will appear here.</small></div></aside>
-<main><div class="readerbar"><button id="prev" class="btn" disabled>←</button><span id="location">Import an EPUB</span><button id="next" class="btn" disabled>→</button></div><div id="viewer"><div class="welcome"><div>📚</div><h1>Your English Reading Space</h1><p>Import an EPUB to start reading.</p><small>The book is processed locally in your browser.</small></div></div></main></div>
-<div id="popup" class="popup hidden"><button id="close" class="close">×</button><h2 id="word"></h2><small id="pron"></small><p id="meaning"></p><span id="level" class="level"></span><button id="save" class="btn primary wide">＋ Add to vocabulary</button></div><div id="toast" class="toast hidden"></div>
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>English Reader</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><b>📚 English Reader <small>V2.1</small></b><div>
+<label class="btn primary">Add EPUB<input id="epubInput" type="file" accept=".epub" hidden></label>
+<button id="fontDown" class="btn">A−</button><button id="fontUp" class="btn">A+</button><button id="theme" class="btn">🌙</button><select id="levelSelect" class="btn"><option value="B2">🟨 B2+ words</option><option value="C1">🟨 C1 only</option></select></div></header>
+<div class="layout">
+<aside><div class="book"><div class="cover">📖</div><div><b id="bookTitle">No book loaded</b><small id="bookAuthor">Import an EPUB to begin</small></div></div>
+<div class="progressRow"><span>Progress</span><span id="progress">0%</span></div><div class="progress"><div id="progressFill"></div></div>
+<h3>Table of Contents</h3><div id="toc" class="toc"><small>Your chapters will appear here.</small></div></aside>
+<main><div class="readerbar"><button id="prev" class="btn" disabled>←</button><span id="location">Import an EPUB</span><button id="next" class="btn" disabled>→</button></div><div id="viewer"><div class="welcome"><div>📚</div><h1>Your English Reading Space</h1><p>Import an EPUB to start reading.</p><small>The book is processed locally in your browser.</small></div></div></main>
+</div>
+<div id="popup" class="popup hidden"><button id="close" class="close">×</button><h2 id="word"></h2><small id="pron"></small><p id="meaning"></p><span id="level" class="level"></span><button id="save" class="btn primary wide">＋ Add to vocabulary</button></div>
+<div id="toast" class="toast hidden"></div>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script><script src="app.js"></script></body></html>
+<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+<script src="app.js"></script>
+</body></html>
