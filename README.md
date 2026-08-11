@@ -1,76 +1,37 @@
-# English Reader V4.5
+# English Reader V3.2
 
-EPUB reader with continuous scrolling, CEFR-oriented vocabulary highlighting, text marking, font-size controls, and synchronized table of contents.
+A browser-based EPUB reader with a CEFR-oriented vocabulary layer.
 
-## V4.5
-- 🟨 B2/C1 vocabulary highlighting
-- 🩵 B2/C1 phrase highlighting
-- Five muted marking colors: red, yellow, blue, purple, green
-- Drag-select text and choose a color from the floating palette
-- Marking works across inline vocabulary-highlight spans
-- Marks are saved in browser local storage
-- 18–42px font sizes
-- Current chapter is highlighted and auto-scrolled in the TOC
-- EPUB is processed locally in the browser
+### Highlighting
+- 🟨 Light yellow = B2+ words
+- 🩵 Light blue = B2+ phrases / phrasal verbs / collocations
+- Switch to C1-only from the top bar
+- Click an item for its meaning and CEFR level
+- Add items to a local vocabulary list
 
-The included vocabulary file is a starter CEFR-oriented dataset. It does not redistribute proprietary Oxford word lists.
+### Vocabulary architecture
+Vocabulary is stored separately in `vocabulary.json`, so the reader engine does not need to be edited when the dataset is expanded.
 
+The project is designed around the CEFR framework. Oxford's public materials describe the Oxford 3000/5000 and Oxford Phrase List as CEFR-aligned resources; the Oxford Phrase List includes idioms, phrasal verbs, collocations and common prepositional phrases. This project does **not** redistribute Oxford's proprietary full lists. citeturn0search0turn0search1turn0search6
 
-### V4.5 marking fix
-- The floating marking palette is triggered by `selectionchange`, not by a paragraph-specific handler.
-- The five color buttons are always shown next to the selected text.
-- Marking no longer uses `Range.surroundContents()` and therefore has no one-paragraph restriction.
-- `app.js?v=34` forces browsers/CDN caches to load the new marking implementation.
-- Reading width and page margins are restored to a more spacious V3.2-style layout.
-- The warm beige paper background is retained.
+The included data is a starter dataset. For a production-grade version, replace/extend `vocabulary.json` with an appropriately licensed or open CEFR dataset.
+
+EPUB files are processed locally in the browser and are not uploaded to a backend.
 
 
-### V4.5
-- The last selected marking color is remembered in browser local storage.
-- Choosing a color from the floating selection palette immediately makes it the default for the next selection.
-- The default color remains active until another color is selected.
+### V3.1 reading mode
+The EPUB renderer now uses continuous vertical scrolling (`scrolled-doc`) instead of paginated/spread reading. Mouse wheel and trackpad scrolling are the primary navigation methods. Previous/Next controls remain available for moving between EPUB sections.
 
 
-### V4.5
-- 📚 Vocabulary library: saved words/phrases can be reviewed and deleted.
-- 📝 Notes: create, review, and delete reading notes; notes store the current chapter and EPUB CFI position.
-- 🔎 Clicking a highlighted word or phrase opens its meaning card.
-- Vocabulary and notes are stored locally in the browser.
+### V3.2
+- User text marking with five muted Morandi-style colors: red, yellow, blue, purple, green.
+- Font size selector expanded from 18px up to 42px.
+- Current chapter is automatically highlighted and scrolled into view in the table of contents.
 
 
-### V4.5
-- 📊 Reading-time dashboard with today's reading time and all-time reading time.
-- 📚 Local book library with reading progress.
-- ✅ Books reaching 99.5% progress are automatically marked as finished.
-- Finished books are listed separately with completion dates.
-- Reading time counts active reading only and pauses when the page is hidden/inactive.
-
-
-### V4.5 — Highlighting/Marking Focus
-- 🟥🟨🩵🟪🟩 Five-color underline palette appears directly after selecting text.
-- 🎨 The last selected marking color is persisted and becomes the default next time.
-- 🟨 B2+/C1 vocabulary uses a soft yellow highlight.
-- 🩵 B2+/C1 phrases use a soft blue highlight.
-- Selection marking does not use `Range.surroundContents()`, so it is not restricted to a single paragraph.
-
-
-### V4.5
-- Fixed the marking palette trigger by listening directly to EPUB iframe `mouseup`/`touchend` and selection events.
-- Five-color marking palette appears next to selected text.
-- Last marking color remains the default across selections and refreshes.
-- Added Narrow / Medium / Wide reading-margin controls with local persistence.
-- Margin settings are applied to the reader viewport and EPUB content after rendering.
-
-
-### V4.5 — Marking Fix
-- Fixed the missing underline style inside EPUB.js content documents.
-- Marked text now visibly renders with the selected Morandi underline color.
-- When the marked selection exactly matches a B2+/C1 word or phrase in the vocabulary data, it is automatically added to Vocabulary.
-- Ordinary sentence/paragraph marking remains a marking-only action.
-
-
-### V4.5 — Manual Marking Independent of Vocabulary
-- Manual five-color underlining works for **any selected text**, regardless of B2+/C1 status.
-- B2+/C1 vocabulary highlighting remains a separate optional system feature.
-- B2+/C1 matching is no longer a prerequisite for manual marking.
-- Exact vocabulary matches may still be added automatically to Vocabulary when marked.
+## V3.2 + Manual Marking
+- Based directly on V3.2.
+- Any selected text can be underlined with five Morandi colors.
+- Last selected underline color is remembered.
+- Reading background is soft ivory/milky-yellow.
+- Existing V3.2 functionality is preserved.
