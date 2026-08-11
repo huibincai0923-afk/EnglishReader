@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>English Reader</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">📚 English Reader</div>
+      <div class="toolbar">
+        <label class="button primary">
+          Add EPUB
+          <input id="fileInput" type="file" accept=".epub" hidden>
+        </label>
+        <button id="themeButton" class="button">🌙</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <h2>My Book</h2>
+        <div id="bookTitle" class="book-title">No book loaded</div>
+        <div class="progress-wrap">
+          <div class="progress-label"><span>Reading progress</span><span id="progressText">0%</span></div>
+          <div class="progress"><div id="progressBar"></div></div>
+        </div>
+        <h3>Chapters</h3>
+        <div id="chapterList" class="chapter-list">
+          <div class="empty">Import an EPUB to begin.</div>
+        </div>
+        <div class="legend">
+          <span class="swatch"></span>
+          <span>IELTS vocabulary</span>
+        </div>
+      </aside>
+
+      <section class="reader-shell">
+        <div class="reader-toolbar">
+          <button id="prevButton" class="button" disabled>← Previous</button>
+          <div id="chapterTitle" class="chapter-title">Welcome</div>
+          <button id="nextButton" class="button" disabled>Next →</button>
+        </div>
+        <article id="reader" class="reader">
+          <div class="welcome">
+            <div class="welcome-icon">📖</div>
+            <h1>Your personal English reader</h1>
+            <p>Import an EPUB book to start reading.</p>
+            <p class="muted">Your book stays in your browser.</p>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <div id="popup" class="popup hidden">
+      <button id="popupClose" class="popup-close">×</button>
+      <div id="popupWord" class="popup-word"></div>
+      <div id="popupPronunciation" class="popup-pronunciation"></div>
+      <div id="popupMeaning" class="popup-meaning"></div>
+      <div id="popupLevel" class="popup-level"></div>
+      <button id="addWordButton" class="button primary full">Add to vocabulary</button>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
