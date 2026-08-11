@@ -1,4 +1,4 @@
-# English Reader V3.1
+# English Reader V3.2
 
 A browser-based EPUB reader with a CEFR-oriented vocabulary layer.
 
@@ -21,3 +21,9 @@ EPUB files are processed locally in the browser and are not uploaded to a backen
 
 ### V3.1 reading mode
 The EPUB renderer now uses continuous vertical scrolling (`scrolled-doc`) instead of paginated/spread reading. Mouse wheel and trackpad scrolling are the primary navigation methods. Previous/Next controls remain available for moving between EPUB sections.
+
+
+### V3.2
+- User text marking with five muted Morandi-style colors: red, yellow, blue, purple, green.
+- Font size selector expanded from 18px up to 42px.
+- Current chapter is automatically highlighted and scrolled into view in the table of contents.

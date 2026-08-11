@@ -5,7 +5,15 @@
 <body>
 <header><b>📚 English Reader <small>V2.1</small></b><div>
 <label class="btn primary">Add EPUB<input id="epubInput" type="file" accept=".epub" hidden></label>
-<button id="fontDown" class="btn">A−</button><button id="fontUp" class="btn">A+</button><button id="theme" class="btn">🌙</button><select id="levelSelect" class="btn"><option value="B2">🟨 B2+ words</option><option value="C1">🟨 C1 only</option></select></div></header>
+<button id="fontDown" class="btn">A−</button><select id="fontSize" class="btn" title="Font size"><option value="18">18px</option><option value="20">20px</option><option value="22">22px</option><option value="24">24px</option><option value="26">26px</option><option value="28">28px</option><option value="30">30px</option><option value="34">34px</option><option value="38">38px</option><option value="42">42px</option></select><button id="fontUp" class="btn">A+</button><button id="theme" class="btn">🌙</button><select id="levelSelect" class="btn"><option value="B2">🟨 B2+ words</option><option value="C1">🟨 C1 only</option></select>
+<div class="underline-tools" title="Highlight / underline color">
+  <button class="mark-btn mark-red" data-mark="red" aria-label="Red underline">红</button>
+  <button class="mark-btn mark-yellow" data-mark="yellow" aria-label="Yellow underline">黄</button>
+  <button class="mark-btn mark-blue" data-mark="blue" aria-label="Blue underline">蓝</button>
+  <button class="mark-btn mark-purple" data-mark="purple" aria-label="Purple underline">紫</button>
+  <button class="mark-btn mark-green" data-mark="green" aria-label="Green underline">绿</button>
+  <button id="clearMark" class="btn" aria-label="Clear selected underline">清除</button>
+</div></div></header>
 <div class="layout">
 <aside><div class="book"><div class="cover">📖</div><div><b id="bookTitle">No book loaded</b><small id="bookAuthor">Import an EPUB to begin</small></div></div>
 <div class="progressRow"><span>Progress</span><span id="progress">0%</span></div><div class="progress"><div id="progressFill"></div></div>
