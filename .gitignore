@@ -1,10 +1,3 @@
-# OS
-.DS_Store
 Thumbs.db
-
-# Editor
+.DS_Store
 .vscode/
-
-# Node
-node_modules/
-dist/
