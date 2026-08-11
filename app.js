@@ -17,7 +17,7 @@ async function openBook(file){
  try{
   const buf=await file.arrayBuffer(); book=ePub(buf);
   $("viewer").innerHTML="";
-  rendition=book.renderTo("viewer",{width:"100%",height:"100%",spread:"none",flow:"paginated"});
+  rendition=book.renderTo("viewer",{width:"100%",height:"100%",spread:"none",flow:"scrolled-doc"});
   rendition.themes.default({body:{color:"inherit !important",background:"transparent !important",fontFamily:"Georgia,serif",fontSize:"18px",lineHeight:"1.75",padding:"0 8% !important"},
    ".reader-word":{background:"#fff2b8",borderRadius:"3px",cursor:"pointer",padding:"0 2px"},
    ".reader-phrase":{background:"#dceeff",borderRadius:"3px",cursor:"pointer",padding:"0 2px"}});

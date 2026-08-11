@@ -1,4 +1,4 @@
-# English Reader V3
+# English Reader V3.1
 
 A browser-based EPUB reader with a CEFR-oriented vocabulary layer.
 
@@ -17,3 +17,7 @@ The project is designed around the CEFR framework. Oxford's public materials des
 The included data is a starter dataset. For a production-grade version, replace/extend `vocabulary.json` with an appropriately licensed or open CEFR dataset.
 
 EPUB files are processed locally in the browser and are not uploaded to a backend.
+
+
+### V3.1 reading mode
+The EPUB renderer now uses continuous vertical scrolling (`scrolled-doc`) instead of paginated/spread reading. Mouse wheel and trackpad scrolling are the primary navigation methods. Previous/Next controls remain available for moving between EPUB sections.
