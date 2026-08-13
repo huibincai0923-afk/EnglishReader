@@ -1,54 +1,3 @@
-
-/* V6.1 — 10-level adjustable reading margins */
-const MARGIN_LEVELS = [10,15,20,25,30,35,40,45,50,55];
-let marginLevel = Number(localStorage.getItem("reader-margin-level") || 3);
-if(!Number.isInteger(marginLevel) || marginLevel<0 || marginLevel>=MARGIN_LEVELS.length) marginLevel=3;
-
-function applyMarginLevel(){
-  const pct=MARGIN_LEVELS[marginLevel];
-  localStorage.setItem("reader-margin-level",String(marginLevel));
-
-  const marginInput=document.getElementById("margin");
-  const marginValue=document.getElementById("marginValue") || document.getElementById("marginLabel");
-  if(marginInput){
-    if(marginInput.type==="range"){
-      marginInput.min="0"; marginInput.max=String(MARGIN_LEVELS.length-1);
-      marginInput.step="1"; marginInput.value=String(marginLevel);
-    }else{
-      marginInput.value=String(pct);
-    }
-  }
-  if(marginValue) marginValue.textContent=`${marginLevel+1}/10 · ${pct}%`;
-
-  // Update the active EPUB renderer and fallback iframe.
-  try{
-    if(rendition?.themes){
-      rendition.themes.override("padding",`${pct}%`);
-      rendition.themes.override("padding-left",`${pct}%`);
-      rendition.themes.override("padding-right",`${pct}%`);
-    }
-  }catch(e){}
-
-  document.querySelectorAll("#viewer iframe").forEach(frame=>{
-    try{
-      const d=frame.contentDocument;
-      if(!d)return;
-      let st=d.getElementById("v61-margin-style");
-      if(!st){st=d.createElement("style");st.id="v61-margin-style";d.head.appendChild(st)}
-      st.textContent=`body{padding-left:${pct}% !important;padding-right:${pct}% !important;}`;
-    }catch(e){}
-  });
-}
-
-function setMarginLevel(level){
-  marginLevel=Math.max(0,Math.min(MARGIN_LEVELS.length-1,Number(level)||0));
-  applyMarginLevel();
-}
-
-function stepMargin(delta){
-  setMarginLevel(marginLevel+delta);
-}
-
 let DATA={words:{},phrases:{}},book=null,rendition=null,locations=null;
 let highlightLevel=localStorage.getItem("highlight-level")||"B2";
 let current=null, markColor=localStorage.getItem("reader-mark-color")||"yellow";
@@ -285,6 +234,60 @@ function applyReaderMargin(){
 }
 syncMarginMenu();
 applyReaderMargin();
+
+
+/* =========================
+   V6.2 — 10-level margin controller
+   Controls the reader content width, not EPUB body padding.
+   This prevents double-padding with book-provided CSS.
+   ========================= */
+const MARGIN_LEVELS = [0,5,10,15,20,25,30,35,40,45];
+let marginLevel = Number(localStorage.getItem("reader-margin-level") || 4);
+if(!Number.isInteger(marginLevel) || marginLevel<0 || marginLevel>=10) marginLevel=4;
+
+function marginPercent(){
+  return MARGIN_LEVELS[marginLevel];
+}
+
+function applyMarginLevel(){
+  const pct=marginPercent();
+  localStorage.setItem("reader-margin-level",String(marginLevel));
+
+  const viewer=document.getElementById("viewer");
+  if(viewer){
+    viewer.style.setProperty("--reader-side-margin",pct+"%");
+    viewer.style.setProperty("--reader-content-width",(100-pct*2)+"%");
+  }
+
+  const input=document.getElementById("margin");
+  if(input && input.type==="range"){
+    input.min="0";
+    input.max="9";
+    input.step="1";
+    input.value=String(marginLevel);
+  }
+
+  const label=document.getElementById("marginValue") || document.getElementById("marginLabel");
+  if(label) label.textContent=`${marginLevel+1}/10`;
+
+  // Apply to the EPUB viewport as a wrapper width, leaving the EPUB's own
+  // internal margins intact.
+  document.querySelectorAll("#viewer iframe").forEach(frame=>{
+    frame.style.width=(100-pct*2)+"%";
+    frame.style.marginLeft=pct+"%";
+    frame.style.marginRight=pct+"%";
+  });
+}
+
+function setMarginLevel(level){
+  marginLevel=Math.max(0,Math.min(9,Number(level)||0));
+  applyMarginLevel();
+}
+
+function stepMargin(delta){
+  setMarginLevel(marginLevel+delta);
+}
+
 
 async function openBook(file){
  try{
@@ -656,4 +659,15 @@ function updateProgress(loc){
 }
 function toast(m){$("toast").textContent=m;$("toast").classList.remove("hidden");clearTimeout(window.__toast);window.__toast=setTimeout(()=>$("toast").classList.add("hidden"),1600)}
 
-window.addEventListener("load",applyMarginLevel);
+window.addEventListener('load',()=>{ 
+(function installV62MarginControl(){
+  const input=document.getElementById("margin");
+  if(!input)return;
+  input.min="0";
+  input.max="9";
+  input.step="1";
+  input.value=String(marginLevel);
+  input.addEventListener("input",e=>setMarginLevel(e.target.value));
+  applyMarginLevel();
+})();
+ });

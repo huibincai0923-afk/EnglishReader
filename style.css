@@ -72,5 +72,24 @@ body.dark{--bg:#20211f;--panel:#292a27;--text:#e8e5dc;--muted:#aaa;--line:#44443
 .compat-error h3{margin-top:0}
 .compat-error pre{white-space:pre-wrap;overflow:auto;background:var(--bg);padding:12px;border-radius:8px}
 
-/* V6.1 margin control */
-#marginValue,#marginLabel{min-width:70px;text-align:center;font-variant-numeric:tabular-nums}
+/* V6.2 — margins are applied to the outer EPUB viewport.
+   Do NOT add reader margins to the EPUB body; books may already define
+   their own internal margins. */
+#viewer{
+  --reader-side-margin:20%;
+  --reader-content-width:60%;
+  overflow-x:hidden;
+}
+#viewer > iframe{
+  display:block!important;
+  box-sizing:border-box!important;
+  width:var(--reader-content-width)!important;
+  margin-left:var(--reader-side-margin)!important;
+  margin-right:var(--reader-side-margin)!important;
+  border:0!important;
+}
+#viewer .fallback-epub-frame{
+  width:var(--reader-content-width)!important;
+  margin-left:var(--reader-side-margin)!important;
+  margin-right:var(--reader-side-margin)!important;
+}

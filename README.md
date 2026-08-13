@@ -86,9 +86,10 @@ The included vocabulary file is a starter CEFR-oriented dataset. It does not red
 - Vocabulary, notes, reading-time statistics, finished-book history, B2+/C1 highlighting, margins, font controls, and existing reading UI are preserved.
 
 
-## V6.1 — 10-Level Margins
-- Margin control expanded to 10 levels: 10%, 15%, 20%, 25%, 30%, 35%, 40%, 45%, 50%, 55%.
-- Current level is displayed as `1/10` through `10/10` when the existing margin value label is present.
-- Margin selection is persisted in localStorage.
-- Applies to EPUB.js rendering and the compatibility fallback iframe.
-- EPUB compatibility logic from V6 is unchanged.
+## V6.2 — Correct 10-Level Margins
+- Rebuilt margin handling from V6 instead of V6.1.
+- Ten real levels: 0%, 5%, 10%, 15%, 20%, 25%, 30%, 35%, 40%, 45% side margins.
+- The default is level 5 (20% side margin).
+- Margins are applied to the outer EPUB iframe viewport, not the EPUB body's CSS.
+- This prevents double-padding and avoids shrinking the text to half a page.
+- Existing EPUB compatibility fallback is unchanged.
