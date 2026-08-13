@@ -236,58 +236,34 @@ syncMarginMenu();
 applyReaderMargin();
 
 
-/* =========================
-   V6.2 — 10-level margin controller
-   Controls the reader content width, not EPUB body padding.
-   This prevents double-padding with book-provided CSS.
-   ========================= */
-const MARGIN_LEVELS = [0,5,10,15,20,25,30,35,40,45];
-let marginLevel = Number(localStorage.getItem("reader-margin-level") || 4);
-if(!Number.isInteger(marginLevel) || marginLevel<0 || marginLevel>=10) marginLevel=4;
-
-function marginPercent(){
-  return MARGIN_LEVELS[marginLevel];
-}
-
-function applyMarginLevel(){
-  const pct=marginPercent();
-  localStorage.setItem("reader-margin-level",String(marginLevel));
-
-  const viewer=document.getElementById("viewer");
-  if(viewer){
-    viewer.style.setProperty("--reader-side-margin",pct+"%");
-    viewer.style.setProperty("--reader-content-width",(100-pct*2)+"%");
-  }
-
-  const input=document.getElementById("margin");
-  if(input && input.type==="range"){
-    input.min="0";
-    input.max="9";
-    input.step="1";
-    input.value=String(marginLevel);
-  }
-
-  const label=document.getElementById("marginValue") || document.getElementById("marginLabel");
-  if(label) label.textContent=`${marginLevel+1}/10`;
-
-  // Apply to the EPUB viewport as a wrapper width, leaving the EPUB's own
-  // internal margins intact.
-  document.querySelectorAll("#viewer iframe").forEach(frame=>{
-    frame.style.width=(100-pct*2)+"%";
-    frame.style.marginLeft=pct+"%";
-    frame.style.marginRight=pct+"%";
+function restoreV5Marks(){
+  if(!book?.rendition)return;
+  let saved=[];
+  try{saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]")}catch(e){}
+  saved.forEach(m=>{
+    if(!m.cfi || !m.color)return;
+    const colors={
+      red:"#c98b8b",yellow:"#d5c58b",blue:"#8eabc0",
+      purple:"#a694b8",green:"#8eaa8e"
+    };
+    try{
+      book.rendition.annotations.add(
+        "underline",m.cfi,{},null,"v5-mark-"+m.color,
+        {color:colors[m.color]||colors.yellow,"stroke-width":"3","stroke-linecap":"round"}
+      );
+    }catch(e){}
   });
 }
 
-function setMarginLevel(level){
-  marginLevel=Math.max(0,Math.min(9,Number(level)||0));
-  applyMarginLevel();
-}
 
-function stepMargin(delta){
-  setMarginLevel(marginLevel+delta);
+function installV5EpubStyles(view){
+  const d=view?.document;
+  if(!d?.head || d.getElementById("v5-epub-styles"))return;
+  const st=d.createElement("style");
+  st.id="v5-epub-styles";
+  st.textContent="html,body{background:#f5f0e6!important;}";
+  d.head.appendChild(st);
 }
-
 
 async function openBook(file){
  try{
@@ -354,20 +330,16 @@ function allowed(level){
 function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}
 
 
-
 function decorate(doc){
   if(!doc?.body) return;
 
-  // System highlights are independent from manual marking.
-  // B2+/C1 words are soft yellow; B2+/C1 phrases are soft blue.
-  const phraseKeys=Object.keys(DATA?.phrases||{})
+  // Only decorate plain text nodes. Existing vocabulary spans and user marks are skipped.
+  const phraseKeys=Object.keys(DATA.phrases)
     .filter(k=>allowed(DATA.phrases[k].cefr))
     .sort((a,b)=>b.length-a.length);
-  const wordKeys=Object.keys(DATA?.words||{})
+  const wordKeys=Object.keys(DATA.words)
     .filter(k=>allowed(DATA.words[k].cefr))
     .sort((a,b)=>b.length-a.length);
-
-  if(!phraseKeys.length && !wordKeys.length) return;
 
   const walker=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT);
   const nodes=[];
@@ -375,67 +347,59 @@ function decorate(doc){
 
   nodes.forEach(n=>{
     if(!n.nodeValue.trim()) return;
-    if(n.parentElement?.closest(
-      ".reader-word,.reader-phrase,.user-mark,script,style,.mark-bubble"
-    )) return;
+    if(n.parentElement?.closest(".reader-word,.reader-phrase,.user-mark,script,style")) return;
 
-    const text=n.nodeValue;
+    const source=n.nodeValue;
     const matches=[];
 
-    for(const key of phraseKeys){
-      const escaped=esc(key).replace(/\\ /g,"\\s+");
-      const re=new RegExp("\\b"+escaped+"\\b","gi");
+    phraseKeys.forEach(key=>{
+      const re=new RegExp("\\b"+esc(key).replace(/\\ /g,"\\s+")+"\\b","gi");
       let m;
-      while((m=re.exec(text))) matches.push({
-        start:m.index,end:m.index+m[0].length,key,type:"phrase"
-      });
-    }
-
-    for(const key of wordKeys){
-      const re=new RegExp("\\b"+esc(key)+"\\b","gi");
-      let m;
-      while((m=re.exec(text))) matches.push({
-        start:m.index,end:m.index+m[0].length,key,type:"word"
-      });
-    }
-
-    // Longest match wins; phrase wins over a word inside the phrase.
-    matches.sort((a,b)=>{
-      if(a.start!==b.start) return a.start-b.start;
-      return (b.end-b.start)-(a.end-a.start);
+      while((m=re.exec(source))){
+        matches.push({i:m.index,j:m.index+m[0].length,key,mkind:"phrase"});
+      }
     });
 
-    const selected=[];
+    wordKeys.forEach(key=>{
+      const re=new RegExp("\\b"+esc(key)+"\\b","gi");
+      let m;
+      while((m=re.exec(source))){
+        matches.push({i:m.index,j:m.index+m[0].length,key,mkind:"word"});
+      }
+    });
+
+    matches.sort((a,b)=>a.i-b.i || (b.j-b.i)-(a.j-a.i));
+
+    // Longest/first match wins. This prevents phrase and word highlights from overlapping.
+    const picked=[];
     let cursor=0;
     for(const m of matches){
-      if(m.start<cursor) continue;
-      selected.push(m);
-      cursor=m.end;
+      if(m.i<cursor) continue;
+      picked.push(m);
+      cursor=m.j;
     }
-    if(!selected.length) return;
+    if(!picked.length) return;
 
     const frag=doc.createDocumentFragment();
     let last=0;
-    for(const m of selected){
-      if(m.start>last) frag.appendChild(doc.createTextNode(text.slice(last,m.start)));
-
+    picked.forEach(m=>{
+      if(m.i>last) frag.appendChild(doc.createTextNode(source.slice(last,m.i)));
       const span=doc.createElement("span");
-      span.className=m.type==="phrase"?"reader-phrase":"reader-word";
+      span.className=m.mkind==="phrase"?"reader-phrase":"reader-word";
+      span.textContent=source.slice(m.i,m.j);
       span.dataset.lookupKey=m.key;
-      span.dataset.cefr=(m.type==="phrase"?DATA.phrases[m.key]:DATA.words[m.key]).cefr;
-      span.textContent=text.slice(m.start,m.end);
       span.addEventListener("click",e=>{
+        // A click without a selection opens the vocabulary definition.
         const sel=doc.defaultView.getSelection();
-        if(!sel || sel.isCollapsed) showWord(m.type,m.key);
+        if(!sel || sel.isCollapsed) showWord(m.mkind,m.key);
       });
       frag.appendChild(span);
-      last=m.end;
-    }
-    if(last<text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
+      last=m.j;
+    });
+    if(last<source.length) frag.appendChild(doc.createTextNode(source.slice(last)));
     n.parentNode.replaceChild(frag,n);
   });
 }
-
 
 
 function showWord(kind,key){
@@ -450,171 +414,169 @@ function showWord(kind,key){
 
 
 
+
 function installMarking(view){
-  const doc=view?.document;
-  const win=doc?.defaultView;
-  if(!doc || !win) return;
+  const doc=view?.document, win=doc?.defaultView;
+  if(!doc || !win || !book?.rendition) return;
+  if(view.__v5MarkingInstalled) return;
+  view.__v5MarkingInstalled=true;
 
-  // Rebind on the current EPUB document. Do not rely on a one-time
-  // selectionchange listener because EPUB.js can replace the iframe document.
-  if(doc.__markInstalled) return;
-  doc.__markInstalled=true;
+  const rendition=book.rendition;
+  const palette=document.createElement("div");
+  palette.className="v5-mark-palette hidden";
+  palette.innerHTML=
+    '<button data-c="red" title="Red">❤️</button>'+
+    '<button data-c="yellow" title="Yellow">🧡</button>'+
+    '<button data-c="blue" title="Blue">💙</button>'+
+    '<button data-c="purple" title="Purple">💜</button>'+
+    '<button data-c="green" title="Green">💚</button>';
+  document.body.appendChild(palette);
 
-  let pendingRange=null;
-
-  const bubble=doc.createElement("div");
-  bubble.className="mark-bubble hidden";
-  bubble.innerHTML=
-    '<button data-c="red" title="Red">🟥</button>'+
-    '<button data-c="yellow" title="Yellow">🟨</button>'+
-    '<button data-c="blue" title="Blue">🩵</button>'+
-    '<button data-c="purple" title="Purple">🟪</button>'+
-    '<button data-c="green" title="Green">🟩</button>';
-  Object.assign(bubble.style,{position:"fixed",zIndex:"2147483647"});
-  doc.body.appendChild(bubble);
+  let pendingCfi=null;
+  let pendingText="";
 
   function sync(){
-    bubble.querySelectorAll("button").forEach(b=>{
-      b.classList.toggle("active-mark",b.dataset.c===markColor);
+    palette.querySelectorAll("button").forEach(b=>{
+      b.classList.toggle("active",b.dataset.c===markColor);
     });
   }
-  sync();
-
   function hide(){
-    bubble.classList.add("hidden");
-    pendingRange=null;
+    palette.classList.add("hidden");
+    pendingCfi=null;
+    pendingText="";
   }
 
-  function readSelection(){
+  function showFromSelection(){
     const sel=win.getSelection();
-    if(!sel || sel.rangeCount===0 || sel.isCollapsed || !sel.toString().trim()){
-      return null;
+    if(!sel || sel.rangeCount===0 || sel.isCollapsed) return;
+    const text=sel.toString().replace(/\s+/g," ").trim();
+    if(!text) return;
+
+    const range=sel.getRangeAt(0);
+    if(!doc.body.contains(range.commonAncestorContainer)) return;
+
+    let cfi;
+    try{
+      cfi=rendition.getCfiFromRange(range);
+    }catch(e){
+      return;
     }
-    const r=sel.getRangeAt(0);
-    if(!doc.body.contains(r.commonAncestorContainer)) return null;
-    return r.cloneRange();
-  }
+    if(!cfi) return;
 
-  function show(){
-    const r=readSelection();
-    if(!r) return;
-    pendingRange=r;
+    pendingCfi=cfi;
+    pendingText=text;
     sync();
-    bubble.classList.remove("hidden");
+    palette.classList.remove("hidden");
 
-    requestAnimationFrame(()=>{
-      const rect=r.getBoundingClientRect();
-      const w=bubble.offsetWidth||190, h=bubble.offsetHeight||44;
-      let left=rect.left+rect.width/2-w/2;
-      let top=rect.top-h-10;
-      left=Math.max(8,Math.min(win.innerWidth-w-8,left));
-      top=Math.max(8,top);
-      bubble.style.left=left+"px";
-      bubble.style.top=top+"px";
-    });
+    const rect=range.getBoundingClientRect();
+    const pr=palette.getBoundingClientRect();
+    let left=rect.left+rect.width/2-pr.width/2;
+    let top=rect.top-pr.height-10;
+
+    // Convert iframe coordinates to top-level viewport coordinates.
+    const frame=view.window?.frameElement;
+    if(frame){
+      const fr=frame.getBoundingClientRect();
+      left += fr.left;
+      top += fr.top;
+    }
+    left=Math.max(8,Math.min(window.innerWidth-pr.width-8,left));
+    top=Math.max(8,top);
+    palette.style.left=left+"px";
+    palette.style.top=top+"px";
   }
 
-  // The important fix: mouseup/touchend is the primary trigger.
-  // selectionchange remains as a secondary trigger.
   let timer=0;
   const schedule=()=>{
     clearTimeout(timer);
-    timer=setTimeout(show,30);
+    timer=setTimeout(showFromSelection,50);
   };
   doc.addEventListener("mouseup",schedule,true);
   doc.addEventListener("touchend",schedule,true);
-  doc.addEventListener("keyup",e=>{
-    if(["Shift","ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) schedule();
-  },true);
   doc.addEventListener("selectionchange",schedule,true);
 
-  function nodesForRange(range){
-    const walker=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT);
-    const arr=[];
-    while(walker.nextNode()){
-      const n=walker.currentNode;
-      if(!n.nodeValue || !n.nodeValue.trim()) continue;
-      if(n.parentElement?.closest("script,style,.mark-bubble")) continue;
-      try{if(range.intersectsNode(n))arr.push(n)}catch(e){}
-    }
-    return arr;
-  }
+  function addAnnotation(color){
+    if(!pendingCfi)return;
 
-  function apply(range,color){
-    const nodes=nodesForRange(range);
-    if(!nodes.length)return false;
-    let ok=false;
-    nodes.forEach(n=>{
-      let a=n===range.startContainer?range.startOffset:0;
-      let b=n===range.endContainer?range.endOffset:n.nodeValue.length;
-      a=Math.max(0,Math.min(a,n.nodeValue.length));
-      b=Math.max(0,Math.min(b,n.nodeValue.length));
-      if(a>=b)return;
+    const className="v5-mark-"+color;
+    const styles={
+      red:{color:"#c98b8b"},
+      yellow:{color:"#d5c58b"},
+      blue:{color:"#8eabc0"},
+      purple:{color:"#a694b8"},
+      green:{color:"#8eaa8e"}
+    };
+    const style=styles[color]||styles.yellow;
 
-      const f=doc.createDocumentFragment();
-      if(a)f.appendChild(doc.createTextNode(n.nodeValue.slice(0,a)));
-      const span=doc.createElement("span");
-      span.className="user-mark mark-"+color;
-      span.dataset.markColor=color;
-      span.textContent=n.nodeValue.slice(a,b);
-      f.appendChild(span);
-      if(b<n.nodeValue.length)f.appendChild(doc.createTextNode(n.nodeValue.slice(b)));
-      n.parentNode.replaceChild(f,n);
-      ok=true;
+    try{
+      rendition.annotations.remove(pendingCfi,"underline");
+    }catch(e){}
+
+    rendition.annotations.add(
+      "underline",
+      pendingCfi,
+      {},
+      null,
+      "v5-mark-"+color,
+      {color:style.color, "stroke-width":"3", "stroke-linecap":"round"}
+    );
+
+    markColor=color;
+    localStorage.setItem("reader-mark-color",color);
+
+    marks.push({
+      text:pendingText,
+      color,
+      cfi:pendingCfi,
+      at:Date.now()
     });
-    return ok;
-  }
+    marks=marks.slice(-2000);
+    localStorage.setItem("reader-marks-v5",JSON.stringify(marks));
 
-  bubble.addEventListener("mousedown",e=>e.preventDefault());
-  bubble.addEventListener("click",e=>{
-    const btn=e.target.closest("button");
-    if(!btn || !pendingRange)return;
-    markColor=btn.dataset.c;
-    localStorage.setItem("reader-mark-color",markColor);
-    sync();
-    const selectedText=pendingRange.toString().replace(/\s+/g," ").trim();
-    if(apply(pendingRange.cloneRange(),markColor)){
-      marks.push({text:selectedText,color:markColor,at:Date.now()});
-      marks=marks.slice(-1000);
-      localStorage.setItem("reader-marks-v34",JSON.stringify(marks));
-
-      // If the selected text is one of our B2+/C1 vocabulary entries,
-      // automatically add it to Vocabulary as well.
-      const normalized=selectedText.toLowerCase();
-      let vocabItem=null;
-      if(DATA?.words){
-        const key=Object.keys(DATA.words).find(k=>k.toLowerCase()===normalized);
-        if(key){
-          const d=DATA.words[key];
-          vocabItem={text:key,kind:"word",cefr:d.cefr,meaning:d.meaning,addedAt:Date.now()};
-        }
-      }
-      if(!vocabItem && DATA?.phrases){
-        const key=Object.keys(DATA.phrases).find(k=>k.toLowerCase()===normalized);
-        if(key){
-          const d=DATA.phrases[key];
-          vocabItem={text:key,kind:"phrase",cefr:d.cefr,meaning:d.meaning,addedAt:Date.now()};
-        }
-      }
-      if(vocabItem){
-        vocab=JSON.parse(localStorage.getItem("reader-vocab")||"[]");
-        if(!vocab.some(x=>x.text.toLowerCase()===vocabItem.text.toLowerCase())){
-          vocab.push(vocabItem);
-          localStorage.setItem("reader-vocab",JSON.stringify(vocab));
-        }
-        toast("Marked · added to Vocabulary");
-      }else{
-        toast("Marked");
+    // Keep the existing optional vocabulary behavior, but marking itself
+    // never depends on vocabulary membership.
+    const normalized=pendingText.toLowerCase();
+    let vocabItem=null;
+    if(DATA?.words){
+      const key=Object.keys(DATA.words).find(k=>k.toLowerCase()===normalized);
+      if(key){
+        const d=DATA.words[key];
+        vocabItem={text:key,kind:"word",cefr:d.cefr,meaning:d.meaning,addedAt:Date.now()};
       }
     }
-    win.getSelection()?.removeAllRanges();
+    if(!vocabItem && DATA?.phrases){
+      const key=Object.keys(DATA.phrases).find(k=>k.toLowerCase()===normalized);
+      if(key){
+        const d=DATA.phrases[key];
+        vocabItem={text:key,kind:"phrase",cefr:d.cefr,meaning:d.meaning,addedAt:Date.now()};
+      }
+    }
+    if(vocabItem){
+      vocab=JSON.parse(localStorage.getItem("reader-vocab")||"[]");
+      if(!vocab.some(x=>x.text.toLowerCase()===vocabItem.text.toLowerCase())){
+        vocab.push(vocabItem);
+        localStorage.setItem("reader-vocab",JSON.stringify(vocab));
+      }
+    }
+
+    toast(vocabItem?"Marked · added to Vocabulary":"Marked");
+    try{win.getSelection()?.removeAllRanges()}catch(e){}
     hide();
+  }
+
+  palette.addEventListener("click",e=>{
+    const btn=e.target.closest("button");
+    if(!btn)return;
+    e.preventDefault();
+    e.stopPropagation();
+    addAnnotation(btn.dataset.c);
   });
 
-  doc.addEventListener("mousedown",e=>{
-    if(!bubble.contains(e.target)) hide();
+  document.addEventListener("mousedown",e=>{
+    if(!palette.contains(e.target)) hide();
   },true);
 }
+
 
 
 
@@ -658,16 +620,3 @@ function updateProgress(loc){
  }catch(e){}
 }
 function toast(m){$("toast").textContent=m;$("toast").classList.remove("hidden");clearTimeout(window.__toast);window.__toast=setTimeout(()=>$("toast").classList.add("hidden"),1600)}
-
-window.addEventListener('load',()=>{ 
-(function installV62MarginControl(){
-  const input=document.getElementById("margin");
-  if(!input)return;
-  input.min="0";
-  input.max="9";
-  input.step="1";
-  input.value=String(marginLevel);
-  input.addEventListener("input",e=>setMarginLevel(e.target.value));
-  applyMarginLevel();
-})();
- });
