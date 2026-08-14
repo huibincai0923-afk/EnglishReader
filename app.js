@@ -42,9 +42,13 @@ function applyReadingFont(){
   if(host){
     host.style.setProperty("--reader-font",f);
     host.style.setProperty("--reader-size",n+"px");
+    host.dataset.font=f;
+    const cssFont = f==="Arial" ? "Arial, sans-serif" : (f==="Helvetica" ? "Helvetica, Arial, sans-serif" : "Georgia, serif");
+    host.style.setProperty("font-family",cssFont,"important");
     host.querySelectorAll(".extension-chapter-content, .extension-chapter-content *").forEach(el=>{
       if(!el.closest("pre,code,svg")){
-        el.style.setProperty("font-family",f+", Georgia, serif","important");
+        const cssFont = f==="Arial" ? "Arial, sans-serif" : (f==="Helvetica" ? "Helvetica, Arial, sans-serif" : "Georgia, serif");
+        el.style.setProperty("font-family",cssFont,"important");
         el.style.setProperty("font-size",n+"px","important");
       }
     });
@@ -415,6 +419,30 @@ function renderExtensionReader(view){
 }
 
 
+
+const MAX_STORED_MARKS=300;
+function readStoredMarks(){
+  try{
+    const raw=localStorage.getItem("reader-marks-v5");
+    const parsed=raw?JSON.parse(raw):[];
+    return Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.text==="string").slice(-MAX_STORED_MARKS):[];
+  }catch(e){ return []; }
+}
+function writeStoredMarks(items){
+  const safe=Array.isArray(items)?items.slice(-MAX_STORED_MARKS):[];
+  try{ localStorage.setItem("reader-marks-v5",JSON.stringify(safe)); }
+  catch(e){
+    // If a browser extension or unusually large selection pushes storage over quota,
+    // progressively retain fewer marks instead of breaking the reader.
+    for(let n=Math.min(100,safe.length);n>=10;n=Math.floor(n/2)){
+      try{localStorage.setItem("reader-marks-v5",JSON.stringify(safe.slice(-n)));return safe.slice(-n)}catch(_){}
+    }
+    try{localStorage.removeItem("reader-marks-v5")}catch(_){}
+    return [];
+  }
+  return safe;
+}
+
 function installMarkInteraction(host){
   if(host.__markInteractionInstalled)return;
   host.__markInteractionInstalled=true;
@@ -425,8 +453,9 @@ function installMarkInteraction(host){
     const link=e.target.closest?.("a");
     if(link && host.contains(link)){
       const href=link.getAttribute("href")||"";
-      if(href && !/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)){
-        e.preventDefault();e.stopPropagation();return;
+      if(href){
+        e.preventDefault();e.stopPropagation();
+        return;
       }
     }
 
@@ -453,14 +482,14 @@ function installMarkInteraction(host){
       while(mark.firstChild) parent.insertBefore(mark.firstChild,mark);
       mark.remove();
 
-      const saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]");
+      const saved=readStoredMarks();
       const pos=saved.findIndex(x=>
         (x.text||"").replace(/\s+/g," ").trim()===text &&
         (x.chapter||"")===currentChapter
       );
       if(pos>=0)saved.splice(pos,1);
-      localStorage.setItem("reader-marks-v5",JSON.stringify(saved));
-      marks=saved;
+      const persisted=writeStoredMarks(saved);
+      marks=persisted;
       close();
       toast("Underline removed");
       if(!$("drawer").classList.contains("hidden") && $("drawerTitle").textContent==="Notes") renderDrawer("Notes");
@@ -482,6 +511,10 @@ function installBrowserMarking(host){
     if(palette) palette.remove();
     palette=null;pendingText="";pendingRange=null;
   };
+  const closePalette=()=>{
+    if(palette) palette.remove();
+    palette=null;
+  };
 
   const show=()=>{
     const sel=window.getSelection();
@@ -500,11 +533,13 @@ function installBrowserMarking(host){
     palette.style.top=Math.max(8,r.top-p.height-10)+"px";
     palette.querySelectorAll("button").forEach(b=>{
       b.classList.toggle("active",b.dataset.c===markColor);
-      b.addEventListener("mousedown",e=>{e.preventDefault();e.stopPropagation();},true);
-      b.onclick=e=>{
+      b.addEventListener("pointerdown",e=>{
         e.preventDefault();e.stopPropagation();
-        applyBrowserMark(b.dataset.c);
-      };
+        const color=b.dataset.c;
+        closePalette();
+        setTimeout(()=>applyBrowserMark(color),0);
+      },true);
+      b.onclick=e=>{e.preventDefault();e.stopPropagation();};
     });
   };
 
@@ -521,13 +556,12 @@ function installBrowserMarking(host){
       span.appendChild(frag);
       pendingRange.insertNode(span);
     }
-    hide();
+    closePalette();
     try{window.getSelection().removeAllRanges()}catch(e){}
     const rec={text:pendingText,color,chapter:currentChapter||"Current chapter",cfi:currentCfi,at:Date.now()};
-    const saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]");
+    const saved=readStoredMarks();
     saved.push(rec);
-    localStorage.setItem("reader-marks-v5",JSON.stringify(saved.slice(-2000)));
-    marks=saved.slice(-2000);
+    marks=writeStoredMarks(saved);
     markColor=color;localStorage.setItem("reader-mark-color",color);setMarkColor(color,false);
     toast("Marked · added to Notes");
     if(!$("drawer").classList.contains("hidden") && $("drawerTitle").textContent==="Notes")renderDrawer("Notes");
