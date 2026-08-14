@@ -35,6 +35,11 @@
       <option value="30">30</option><option value="34">34</option><option value="38">38</option>
       <option value="42">42</option>
     </select>
+    <select id="fontFamily" class="control font-family" title="Reading font">
+      <option value="Georgia">Georgia</option>
+      <option value="Arial">Arial</option>
+      <option value="Helvetica">Helvetica</option>
+    </select>
     <button id="fontDown" class="icon-btn" title="Smaller text">A−</button>
     <button id="fontUp" class="icon-btn" title="Larger text">A+</button>
   </div>
@@ -45,6 +50,7 @@
     <button id="openStats" class="control">Reading</button>
     <button id="marginBtn" class="control">Margins</button>
     <button id="openPomodoro" class="control focus-btn"><span class="focus-dot"></span> Focus</button>
+    <button id="browserMode" class="control browser-mode" title="Make the book a normal page so browser annotation extensions can interact with the text">Web annotations</button>
     <button id="theme" class="icon-btn" title="Toggle theme">◐</button>
   </div>
 </header>
@@ -80,7 +86,7 @@
 
     <div class="sidebar-footer">
       <span>Made for slow reading.</span>
-      <span>v5.1</span>
+      <span>v5.2</span>
     </div>
   </aside>
 
@@ -100,6 +106,7 @@
         <label class="empty-open">Choose a book<input type="file" accept=".epub" hidden onchange="this.files[0]&&openBook(this.files[0])"></label>
       </div>
     </div></div>
+    <div id="extensionReader" aria-label="Web annotation reading surface"></div>
 
     <div class="bottom">
       <button id="prev" class="nav-btn" disabled>←</button>

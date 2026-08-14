@@ -251,3 +251,46 @@ button{color:inherit}
   .toolbar-group.secondary .control{display:none}
   #viewer{padding:25px 15px 100px}.reading-header{padding:0 16px}
 }
+
+/* V5.2 — typography controls */
+.font-family{min-width:92px}
+.browser-mode.active{background:var(--accent-soft);border-color:var(--line-strong);font-weight:700}
+
+/* V5.2 — top-level, extension-friendly reader.
+   This is ordinary DOM, intentionally not a shadow root or iframe. */
+#extensionReader{
+  max-width:1000px;margin:0 auto;padding:42px 58px 120px;
+  min-height:calc(100vh - 114px);display:none;
+  --reader-font:Georgia;
+}
+#extensionReader .extension-chapter{
+  background:#f5f0e6;color:#292925;border-radius:3px;
+  padding:38px 8%;box-shadow:0 8px 30px rgba(57,48,38,.035);
+  font-family:var(--reader-font),Georgia,serif;
+  font-size:18px;line-height:1.8;
+}
+#extensionReader .extension-chapter-content{
+  font-family:var(--reader-font),Georgia,serif!important;
+}
+#extensionReader img{max-width:100%;height:auto}
+#extensionReader a{color:inherit}
+#extensionReader .reader-word{background:#fff1b5!important}
+#extensionReader .reader-phrase{background:#d9ecfa!important}
+body.browser-annotation-active #viewer > iframe{display:none!important}
+body.browser-annotation-active #extensionReader{display:block!important}
+.notes-empty{text-align:center;padding:55px 20px;color:var(--muted)}
+.notes-empty-mark{font-size:30px;margin-bottom:10px;opacity:.7}
+.notes-empty h3{font-family:Georgia,serif;color:var(--text);margin:0 0 6px;font-size:17px}
+.notes-empty p{font-size:11px;line-height:1.55;margin:0 auto;max-width:260px}
+.auto-note{position:relative}
+.note-color-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:1px}
+.note-color-dot.red{background:#c98b8b}.note-color-dot.yellow{background:#d5c58b}
+.note-color-dot.blue{background:#8eabc0}.note-color-dot.purple{background:#a694b8}
+.note-color-dot.green{background:#8eaa8e}
+@media(max-width:1120px){
+  .browser-mode{display:none}
+}
+@media(max-width:800px){
+  #extensionReader{padding:25px 15px 100px}
+  #extensionReader .extension-chapter{padding:25px 6%}
+}

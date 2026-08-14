@@ -24,7 +24,16 @@ if(localStorage.getItem("reader-dark")==="true")document.body.classList.add("dar
 
 const fs=localStorage.getItem("reader-font-size")||"18";
 $("fontSize").value=fs;
-$("fontSize").onchange=()=>{let n=$("fontSize").value;localStorage.setItem("reader-font-size",n);rendition?.themes.fontSize(n+"px")};
+$("fontSize").onchange=()=>{let n=$("fontSize").value;localStorage.setItem("reader-font-size",n);rendition?.themes.fontSize(n+"px");applyReadingFont()};
+const savedFont=localStorage.getItem("reader-font-family")||"Georgia";
+$("fontFamily").value=savedFont;
+function applyReadingFont(){
+  const f=$("fontFamily")?.value||localStorage.getItem("reader-font-family")||"Georgia";
+  localStorage.setItem("reader-font-family",f);
+  rendition?.themes.fontFamily(f);
+  document.getElementById("extensionReader")?.style.setProperty("--reader-font",f);
+}
+$("fontFamily").onchange=applyReadingFont;
 $("fontUp").onclick=()=>{$("fontSize").value=String(Math.min(42,Number($("fontSize").value)+2));$("fontSize").dispatchEvent(new Event("change"))};
 $("fontDown").onclick=()=>{$("fontSize").value=String(Math.max(18,Number($("fontSize").value)-2));$("fontSize").dispatchEvent(new Event("change"))};
 $("levelSelect").onchange=()=>{highlightLevel=$("levelSelect").value;localStorage.setItem("highlight-level",highlightLevel);rendition?.views().forEach(v=>decorate(v.document))};
@@ -65,7 +74,7 @@ function renderDrawer(type){
   const body=$("drawerBody");
   if(type==="Vocabulary"){
     vocab=JSON.parse(localStorage.getItem("reader-vocab")||"[]");
-    if(!vocab.length){body.innerHTML='<div class="empty">No saved words yet.<br>Click a highlighted word and choose “Add to vocabulary”.</div>';return}
+    if(!vocab.length){body.innerHTML='<div class="empty">No saved words yet.<br>Click a highlighted word to see its definition, then save it to Vocabulary.</div>';return}
     body.innerHTML=vocab.slice().reverse().map((x,i)=>`
       <div class="vocab-item">
         <div class="vocab-word">${escapeHtml(x.text)}</div>
@@ -80,25 +89,28 @@ function renderDrawer(type){
   }
 
   if(type==="Notes"){
-    notes=JSON.parse(localStorage.getItem("reader-notes")||"[]");
-    body.innerHTML=`
-      <div class="note-add">
-        <textarea id="newNote" placeholder="Write a note about what you are reading..."></textarea>
-        <button id="addNote">Add</button>
-      </div>`+
-      (notes.length?notes.slice().reverse().map((n,i)=>`
-        <div class="note-item">
-          <div class="note-ref">${escapeHtml(n.chapter||"Current chapter")} · ${new Date(n.at).toLocaleString()}</div>
-          <div class="note-text">${escapeHtml(n.text)}</div>
-          <div class="note-actions"><button class="item-delete" data-note="${notes.length-1-i}">Delete</button></div>
-        </div>`).join(""):'<div class="empty">No notes yet.</div>');
-    $("addNote").onclick=()=>{
-      const text=$("newNote").value.trim();if(!text){toast("Write a note first");return}
-      notes.push({text,chapter:currentChapter||"Current chapter",cfi:currentCfi,at:Date.now()});
-      localStorage.setItem("reader-notes",JSON.stringify(notes));renderDrawer("Notes");toast("Note saved");
-    };
-    body.querySelectorAll("[data-note]").forEach(b=>b.onclick=()=>{
-      notes.splice(Number(b.dataset.note),1);localStorage.setItem("reader-notes",JSON.stringify(notes));renderDrawer("Notes");
+    const savedMarks=JSON.parse(localStorage.getItem("reader-marks-v5")||localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks")||"[]");
+    const items=savedMarks.filter(x=>x&&x.text&&x.text.trim()).slice().reverse();
+    if(!items.length){
+      body.innerHTML='<div class="notes-empty"><div class="notes-empty-mark">♥</div><h3>No marks yet</h3><p>Select a passage and underline it. Your marked text will appear here automatically.</p></div>';
+      return;
+    }
+    body.innerHTML=items.map((n,i)=>{
+      const c=n.color||"yellow";
+      const label=(n.chapter||currentChapter||"Current chapter").split("#")[0];
+      return `<div class="note-item auto-note">
+        <div class="note-ref"><span class="note-color-dot ${escapeHtml(c)}"></span>${escapeHtml(label)} · ${new Date(n.at||Date.now()).toLocaleString()}</div>
+        <div class="note-text">${escapeHtml(n.text)}</div>
+        <div class="note-actions"><button class="item-delete" data-mark-note="${items.length-1-i}">Remove mark</button></div>
+      </div>`;
+    }).join("");
+    body.querySelectorAll("[data-mark-note]").forEach(b=>b.onclick=()=>{
+      const idx=Number(b.dataset.markNote);
+      const marksNow=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]");
+      marksNow.splice(idx,1);
+      localStorage.setItem("reader-marks-v5",JSON.stringify(marksNow));
+      renderDrawer("Notes");
+      toast("Mark removed");
     });
     return;
   }
@@ -272,7 +284,7 @@ async function openBook(file){
   $("viewer").innerHTML="";
   rendition=book.renderTo("viewer",{width:"100%",height:"auto",spread:"none",flow:"scrolled-doc"});
   rendition.themes.default({
-    body:{color:"inherit !important",background:"transparent !important",fontFamily:"Georgia,serif",fontSize:fs+"px",lineHeight:"1.8",padding:"0 7% !important"},
+    body:{color:"inherit !important",background:"transparent !important",fontFamily:(localStorage.getItem("reader-font-family")||"Georgia"),fontSize:fs+"px",lineHeight:"1.8",padding:"0 7% !important"},
     ".reader-word":{background:"#fff2b8",borderRadius:"3px",cursor:"pointer",padding:"0 2px"},
     ".reader-phrase":{background:"#dceeff",borderRadius:"3px",cursor:"pointer",padding:"0 2px"},
     ".user-mark":{paddingBottom:"1px"},
@@ -284,6 +296,8 @@ async function openBook(file){
   });
   rendition.on("rendered",(_,view)=>setTimeout(()=>{
     decorate(view.document);restoreMarks(view.document);installMarking(view);
+    extensionChapterView=view;
+    renderExtensionReader(view);
   },40));
   rendition.on("relocated",loc=>{
     if(loc?.start){
@@ -302,9 +316,153 @@ async function openBook(file){
   await buildToc();
   const saved=localStorage.getItem("reader-cfi");
   await rendition.display(saved||undefined);
+  applyReadingFont();
   $("prev").disabled=false;$("next").disabled=false;toast("Book loaded");
  }catch(e){console.error(e);toast("This EPUB could not be opened")}
 }
+
+
+/* ============================================================
+   V5.2 — Browser Annotation Mode
+   EPUB.js renders chapters inside iframes. Many Chrome annotation
+   extensions only operate on the top-level document and do not
+   declare all_frames=true. To make third-party web annotation
+   extensions usable, this mode mirrors the currently rendered
+   XHTML chapter into a normal top-level DOM container.
+   No shadow DOM is used.
+   ============================================================ */
+let browserAnnotationMode=localStorage.getItem("browser-annotation-mode")!=="false";
+let extensionChapterView=null;
+
+function setBrowserMode(on, notify=true){
+  browserAnnotationMode=!!on;
+  localStorage.setItem("browser-annotation-mode",String(browserAnnotationMode));
+  document.body.classList.toggle("browser-annotation-active",browserAnnotationMode);
+  $("browserMode")?.classList.toggle("active",browserAnnotationMode);
+  if(extensionChapterView) renderExtensionReader(extensionChapterView);
+  if(notify) toast(browserAnnotationMode?"Web annotations on":"Web annotations off");
+}
+
+function absolutizeUrls(container, baseURI){
+  container.querySelectorAll("[src]").forEach(el=>{
+    try{el.src=new URL(el.getAttribute("src"),baseURI).href}catch(e){}
+  });
+  container.querySelectorAll("[href]").forEach(el=>{
+    const h=el.getAttribute("href");
+    if(!h || h.startsWith("#") || h.startsWith("javascript:"))return;
+    try{el.href=new URL(h,baseURI).href}catch(e){}
+  });
+}
+
+function renderExtensionReader(view){
+  const host=$("extensionReader");
+  const iframe=document.querySelector("#viewer iframe");
+  if(!host || !view?.document?.body)return;
+
+  extensionChapterView=view;
+  host.innerHTML="";
+  host.style.setProperty("--reader-font",$("fontFamily")?.value||"Georgia");
+
+  const shell=document.createElement("article");
+  shell.className="extension-chapter";
+  shell.setAttribute("data-extension-reader","true");
+
+  // Copy chapter-local styles so the mirrored page remains visually close
+  // to the EPUB rendition while still being ordinary top-level DOM.
+  view.document.querySelectorAll("style").forEach(st=>{
+    const copy=document.createElement("style");
+    copy.textContent=st.textContent||"";
+    shell.appendChild(copy);
+  });
+
+  const content=document.createElement("div");
+  content.className="extension-chapter-content";
+  content.innerHTML=view.document.body.innerHTML;
+  content.querySelectorAll("script,iframe,object,embed").forEach(x=>x.remove());
+  absolutizeUrls(content,view.document.baseURI||location.href);
+
+  // Avoid duplicating EPUB.js UI artefacts if any exist.
+  content.querySelectorAll(".v5-mark-palette").forEach(x=>x.remove());
+  shell.appendChild(content);
+  host.appendChild(shell);
+
+  decorate(host);
+  restoreMarks(host);
+  installBrowserMarking(host);
+  document.body.classList.toggle("browser-annotation-active",browserAnnotationMode);
+  if(iframe)iframe.style.display=browserAnnotationMode?"none":"block";
+  host.style.display=browserAnnotationMode?"block":"none";
+}
+
+function installBrowserMarking(host){
+  if(host.__browserMarkingInstalled)return;
+  host.__browserMarkingInstalled=true;
+
+  let palette=null,pendingText="",pendingRange=null;
+
+  const hide=()=>{
+    palette?.remove();
+    palette=null;pendingText="";pendingRange=null;
+  };
+
+  const show=()=>{
+    const sel=window.getSelection();
+    if(!sel || sel.rangeCount===0 || sel.isCollapsed)return;
+    const text=sel.toString().replace(/\s+/g," ").trim();
+    const range=sel.getRangeAt(0);
+    if(!text || !host.contains(range.commonAncestorContainer))return;
+
+    pendingText=text;pendingRange=range.cloneRange();
+    palette=document.createElement("div");
+    palette.className="v5-mark-palette";
+    palette.innerHTML='<button data-c="red">❤️</button><button data-c="yellow">🧡</button><button data-c="blue">💙</button><button data-c="purple">💜</button><button data-c="green">💚</button>';
+    document.body.appendChild(palette);
+    const r=range.getBoundingClientRect(), p=palette.getBoundingClientRect();
+    palette.style.left=Math.max(8,Math.min(innerWidth-p.width-8,r.left+r.width/2-p.width/2))+"px";
+    palette.style.top=Math.max(8,r.top-p.height-10)+"px";
+    palette.querySelectorAll("button").forEach(b=>{
+      b.classList.toggle("active",b.dataset.c===markColor);
+      b.onclick=e=>{
+        e.preventDefault();e.stopPropagation();
+        applyBrowserMark(b.dataset.c);
+      };
+    });
+  };
+
+  function applyBrowserMark(color){
+    if(!pendingRange||!pendingText)return;
+    const span=document.createElement("span");
+    span.className="user-mark mark-"+color;
+    span.dataset.markColor=color;
+    try{
+      pendingRange.surroundContents(span);
+    }catch(e){
+      // For selections spanning multiple DOM nodes, use an extracted fragment.
+      const frag=pendingRange.extractContents();
+      span.appendChild(frag);
+      pendingRange.insertNode(span);
+    }
+    const rec={text:pendingText,color,chapter:currentChapter||"Current chapter",cfi:currentCfi,at:Date.now()};
+    const saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]");
+    saved.push(rec);
+    localStorage.setItem("reader-marks-v5",JSON.stringify(saved.slice(-2000)));
+    marks=saved.slice(-2000);
+    markColor=color;localStorage.setItem("reader-mark-color",color);setMarkColor(color,false);
+    toast("Marked · added to Notes");
+    hide();
+    try{window.getSelection().removeAllRanges()}catch(e){}
+    if(!$("drawer").classList.contains("hidden") && $("drawerTitle").textContent==="Notes")renderDrawer("Notes");
+  }
+
+  host.addEventListener("mouseup",()=>setTimeout(show,30),true);
+  host.addEventListener("touchend",()=>setTimeout(show,50),true);
+  document.addEventListener("mousedown",e=>{
+    if(palette && !palette.contains(e.target) && !host.contains(e.target))hide();
+  },true);
+}
+
+$("browserMode").onclick=()=>setBrowserMode(!browserAnnotationMode);
+setBrowserMode(browserAnnotationMode,false);
 
 async function buildToc(){
  const nav=await book.loaded.navigation;

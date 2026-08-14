@@ -83,3 +83,11 @@ The included vocabulary file is a starter CEFR-oriented dataset. It does not red
 - Added a dedicated Focus/Pomodoro panel with 25/45/50-minute presets.
 - Timer supports start/pause, reset, skip, session counts, total focus minutes, persistence, and keyboard shortcuts.
 - Existing V5 CFI marking, vocabulary, notes, reading statistics, finished books, highlighting, margins, and EPUB reading behavior are preserved.
+
+
+## V5.2 — Browser Annotations, Auto Notes & Typography
+- Added an optional **Web annotations** reading surface that mirrors the current EPUB XHTML into ordinary top-level DOM, allowing browser annotation extensions that do not support iframe/all-frames injection to interact with the book text.
+- Added Georgia, Arial, and Helvetica reading fonts with persistent selection.
+- Notes is now an automatic record of marked passages; the manual note composer was removed.
+- Each saved mark appears in Notes with its text, color, chapter, and timestamp.
+- Removed the manual-note path that could surface arbitrary pasted text.
