@@ -267,7 +267,7 @@ button{color:inherit}
   background:#f5f0e6;color:#292925;border-radius:3px;
   padding:38px 8%;box-shadow:0 8px 30px rgba(57,48,38,.035);
   font-family:var(--reader-font),Georgia,serif;
-  font-size:18px;line-height:1.8;
+  font-size:var(--reader-size,18px);line-height:1.8;
 }
 #extensionReader .extension-chapter-content{
   font-family:var(--reader-font),Georgia,serif!important;
@@ -293,4 +293,22 @@ body.browser-annotation-active #extensionReader{display:block!important}
 @media(max-width:800px){
   #extensionReader{padding:25px 15px 100px}
   #extensionReader .extension-chapter{padding:25px 6%}
+}
+
+.mark-delete-popover{
+  position:fixed;z-index:100000;padding:5px;
+  border:1px solid var(--line-strong,#d9d2c7);border-radius:10px;
+  background:rgba(255,253,248,.98);box-shadow:0 8px 25px rgba(40,35,28,.14)
+}
+.mark-delete-popover button{
+  border:0;background:transparent;padding:7px 10px;border-radius:7px;
+  font:600 11px/1 system-ui,sans-serif;color:#7b4c4c;cursor:pointer
+}
+.mark-delete-popover button:hover{background:#f4e8e2}
+#extensionReader .extension-chapter-content,
+#extensionReader .extension-chapter-content p,
+#extensionReader .extension-chapter-content div,
+#extensionReader .extension-chapter-content li{
+  font-family:var(--reader-font,Georgia),Georgia,serif!important;
+  font-size:var(--reader-size,18px)!important
 }

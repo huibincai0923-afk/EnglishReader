@@ -29,9 +29,26 @@ const savedFont=localStorage.getItem("reader-font-family")||"Georgia";
 $("fontFamily").value=savedFont;
 function applyReadingFont(){
   const f=$("fontFamily")?.value||localStorage.getItem("reader-font-family")||"Georgia";
+  const n=$("fontSize")?.value||localStorage.getItem("reader-font-size")||"18";
   localStorage.setItem("reader-font-family",f);
-  rendition?.themes.fontFamily(f);
-  document.getElementById("extensionReader")?.style.setProperty("--reader-font",f);
+  localStorage.setItem("reader-font-size",n);
+  if(rendition){
+    try{
+      rendition.themes.fontFamily(f);
+      rendition.themes.fontSize(n+"px");
+    }catch(e){}
+  }
+  const host=document.getElementById("extensionReader");
+  if(host){
+    host.style.setProperty("--reader-font",f);
+    host.style.setProperty("--reader-size",n+"px");
+    host.querySelectorAll(".extension-chapter-content, .extension-chapter-content *").forEach(el=>{
+      if(!el.closest("pre,code,svg")){
+        el.style.setProperty("font-family",f+", Georgia, serif","important");
+        el.style.setProperty("font-size",n+"px","important");
+      }
+    });
+  }
 }
 $("fontFamily").onchange=applyReadingFont;
 $("fontUp").onclick=()=>{$("fontSize").value=String(Math.min(42,Number($("fontSize").value)+2));$("fontSize").dispatchEvent(new Event("change"))};
@@ -362,6 +379,7 @@ function renderExtensionReader(view){
   extensionChapterView=view;
   host.innerHTML="";
   host.style.setProperty("--reader-font",$("fontFamily")?.value||"Georgia");
+  host.style.setProperty("--reader-size",($("fontSize")?.value||"18")+"px");
 
   const shell=document.createElement("article");
   shell.className="extension-chapter";
@@ -389,9 +407,69 @@ function renderExtensionReader(view){
   decorate(host);
   restoreMarks(host);
   installBrowserMarking(host);
+  installMarkInteraction(host);
   document.body.classList.toggle("browser-annotation-active",browserAnnotationMode);
   if(iframe)iframe.style.display=browserAnnotationMode?"none":"block";
   host.style.display=browserAnnotationMode?"block":"none";
+  applyReadingFont();
+}
+
+
+function installMarkInteraction(host){
+  if(host.__markInteractionInstalled)return;
+  host.__markInteractionInstalled=true;
+  let pop=null;
+  const close=()=>{if(pop){pop.remove();pop=null;}};
+
+  host.addEventListener("click",e=>{
+    const link=e.target.closest?.("a");
+    if(link && host.contains(link)){
+      const href=link.getAttribute("href")||"";
+      if(href && !/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)){
+        e.preventDefault();e.stopPropagation();return;
+      }
+    }
+
+    const mark=e.target.closest?.(".user-mark");
+    if(!mark || !host.contains(mark)){
+      if(!e.target.closest?.(".mark-delete-popover")) close();
+      return;
+    }
+    e.preventDefault();e.stopPropagation();close();
+
+    pop=document.createElement("div");
+    pop.className="mark-delete-popover";
+    pop.innerHTML='<button type="button" data-delete-mark="1">Remove underline</button>';
+    document.body.appendChild(pop);
+
+    const r=mark.getBoundingClientRect(), p=pop.getBoundingClientRect();
+    pop.style.left=Math.max(8,Math.min(innerWidth-p.width-8,r.left+r.width/2-p.width/2))+"px";
+    pop.style.top=Math.min(innerHeight-p.height-8,Math.max(8,r.bottom+8))+"px";
+
+    pop.querySelector("[data-delete-mark]").onclick=ev=>{
+      ev.preventDefault();ev.stopPropagation();
+      const text=(mark.textContent||"").replace(/\s+/g," ").trim();
+      const parent=mark.parentNode;
+      while(mark.firstChild) parent.insertBefore(mark.firstChild,mark);
+      mark.remove();
+
+      const saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]");
+      const pos=saved.findIndex(x=>
+        (x.text||"").replace(/\s+/g," ").trim()===text &&
+        (x.chapter||"")===currentChapter
+      );
+      if(pos>=0)saved.splice(pos,1);
+      localStorage.setItem("reader-marks-v5",JSON.stringify(saved));
+      marks=saved;
+      close();
+      toast("Underline removed");
+      if(!$("drawer").classList.contains("hidden") && $("drawerTitle").textContent==="Notes") renderDrawer("Notes");
+    };
+  },true);
+
+  document.addEventListener("mousedown",e=>{
+    if(pop && !pop.contains(e.target) && !host.contains(e.target))close();
+  },true);
 }
 
 function installBrowserMarking(host){
@@ -401,7 +479,7 @@ function installBrowserMarking(host){
   let palette=null,pendingText="",pendingRange=null;
 
   const hide=()=>{
-    palette?.remove();
+    if(palette) palette.remove();
     palette=null;pendingText="";pendingRange=null;
   };
 
@@ -422,6 +500,7 @@ function installBrowserMarking(host){
     palette.style.top=Math.max(8,r.top-p.height-10)+"px";
     palette.querySelectorAll("button").forEach(b=>{
       b.classList.toggle("active",b.dataset.c===markColor);
+      b.addEventListener("mousedown",e=>{e.preventDefault();e.stopPropagation();},true);
       b.onclick=e=>{
         e.preventDefault();e.stopPropagation();
         applyBrowserMark(b.dataset.c);
@@ -430,7 +509,7 @@ function installBrowserMarking(host){
   };
 
   function applyBrowserMark(color){
-    if(!pendingRange||!pendingText)return;
+    if(!pendingRange||!pendingText){hide();return;}
     const span=document.createElement("span");
     span.className="user-mark mark-"+color;
     span.dataset.markColor=color;
@@ -442,6 +521,8 @@ function installBrowserMarking(host){
       span.appendChild(frag);
       pendingRange.insertNode(span);
     }
+    hide();
+    try{window.getSelection().removeAllRanges()}catch(e){}
     const rec={text:pendingText,color,chapter:currentChapter||"Current chapter",cfi:currentCfi,at:Date.now()};
     const saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]");
     saved.push(rec);
@@ -449,8 +530,6 @@ function installBrowserMarking(host){
     marks=saved.slice(-2000);
     markColor=color;localStorage.setItem("reader-mark-color",color);setMarkColor(color,false);
     toast("Marked · added to Notes");
-    hide();
-    try{window.getSelection().removeAllRanges()}catch(e){}
     if(!$("drawer").classList.contains("hidden") && $("drawerTitle").textContent==="Notes")renderDrawer("Notes");
   }
 

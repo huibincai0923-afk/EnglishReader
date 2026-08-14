@@ -91,3 +91,11 @@ The included vocabulary file is a starter CEFR-oriented dataset. It does not red
 - Notes is now an automatic record of marked passages; the manual note composer was removed.
 - Each saved mark appears in Notes with its text, color, chapter, and timestamp.
 - Removed the manual-note path that could surface arbitrary pasted text.
+
+
+## V5.3 — Typography & Marking Stability
+- Fixed font family switching in the top-level annotation reader.
+- Fixed font size switching in the top-level annotation reader.
+- Mark palette now closes reliably after applying a color.
+- Clicking an existing underline opens a **Remove underline** action.
+- Relative EPUB links in the mirrored top-level reader are prevented from navigating the Vercel SPA to a `NOT_FOUND` route.
