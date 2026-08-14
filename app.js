@@ -620,3 +620,106 @@ function updateProgress(loc){
  }catch(e){}
 }
 function toast(m){$("toast").textContent=m;$("toast").classList.remove("hidden");clearTimeout(window.__toast);window.__toast=setTimeout(()=>$("toast").classList.add("hidden"),1600)}
+
+
+/* =========================
+   V5.1 — refined Pomodoro
+   ========================= */
+const POMO_KEY="english-reader-pomodoro";
+let pomoMinutes=Number(localStorage.getItem(POMO_KEY+"-minutes")||25);
+let pomoRemaining=pomoMinutes*60;
+let pomoRunning=false;
+let pomoInterval=null;
+let pomoCompleted=Number(localStorage.getItem(POMO_KEY+"-completed")||0);
+let pomoToday=Number(localStorage.getItem(POMO_KEY+"-today-count")||0);
+let pomoTodayKey=localStorage.getItem(POMO_KEY+"-today-key")||"";
+
+function pomoTodayResetIfNeeded(){
+  const k=todayKey();
+  if(pomoTodayKey!==k){pomoTodayKey=k;pomoToday=0;localStorage.setItem(POMO_KEY+"-today-key",k);localStorage.setItem(POMO_KEY+"-today-count","0");}
+}
+pomoTodayResetIfNeeded();
+
+function renderPomodoro(){
+  const total=pomoMinutes*60;
+  const elapsed=total-pomoRemaining;
+  const deg=Math.max(0,Math.min(360,(elapsed/total)*360));
+  const ring=$("timerRing");
+  if(ring)ring.style.setProperty("--progress",deg+"deg");
+  const m=Math.floor(pomoRemaining/60), sec=pomoRemaining%60;
+  if($("pomoTime"))$("pomoTime").textContent=String(m).padStart(2,"0")+":"+String(sec).padStart(2,"0");
+  if($("pomoStart"))$("pomoStart").textContent=pomoRunning?"Pause":"Start focus";
+  if($("pomoHint"))$("pomoHint").textContent=pomoRunning?"in focus":"deep reading";
+  if($("pomoToday"))$("pomoToday").textContent=pomoToday;
+  if($("pomoTotal"))$("pomoTotal").textContent=pomoCompleted;
+  const mins=Math.floor(Number(localStorage.getItem(POMO_KEY+"-minutes-total")||0));
+  if($("pomoMinutes"))$("pomoMinutes").textContent=mins+"m";
+}
+
+function savePomoStats(){
+  localStorage.setItem(POMO_KEY+"-completed",String(pomoCompleted));
+  localStorage.setItem(POMO_KEY+"-today-count",String(pomoToday));
+  localStorage.setItem(POMO_KEY+"-minutes-total",String(Number(localStorage.getItem(POMO_KEY+"-minutes-total")||0)+pomoMinutes));
+  localStorage.setItem(POMO_KEY+"-minutes",String(pomoMinutes));
+}
+
+function resetPomodoro(){
+  if(pomoInterval)clearInterval(pomoInterval);
+  pomoInterval=null;pomoRunning=false;pomoRemaining=pomoMinutes*60;renderPomodoro();
+}
+function finishPomodoro(){
+  if(pomoInterval)clearInterval(pomoInterval);
+  pomoInterval=null;pomoRunning=false;pomoCompleted++;pomoToday++;savePomoStats();
+  pomoRemaining=pomoMinutes*60;renderPomodoro();
+  toast("Focus session complete · take a short break");
+  try{document.title="Break · English Reader";setTimeout(()=>document.title="English Reader",3500)}catch(e){}
+}
+function togglePomodoro(){
+  if(pomoRunning){
+    pomoRunning=false;clearInterval(pomoInterval);pomoInterval=null;renderPomodoro();return;
+  }
+  pomoRunning=true;
+  clearInterval(pomoInterval);
+  pomoInterval=setInterval(()=>{
+    if(pomoRemaining<=1){finishPomodoro();return}
+    pomoRemaining--;renderPomodoro();
+  },1000);
+  renderPomodoro();
+}
+
+$("openPomodoro").onclick=()=>{
+  pomoTodayResetIfNeeded();
+  $("pomodoro").classList.remove("hidden");
+  renderPomodoro();
+};
+$("pomoClose").onclick=()=>{$("pomodoro").classList.add("hidden")};
+$("pomodoro").addEventListener("mousedown",e=>{if(e.target===$("pomodoro"))$("pomodoro").classList.add("hidden")});
+$("pomoStart").onclick=togglePomodoro;
+$("pomoReset").onclick=resetPomodoro;
+$("pomoSkip").onclick=()=>{resetPomodoro();toast("Timer reset")};
+document.querySelectorAll(".preset").forEach(b=>b.onclick=()=>{
+  if(pomoRunning)return;
+  pomoMinutes=Number(b.dataset.preset)||25;
+  pomoRemaining=pomoMinutes*60;
+  localStorage.setItem(POMO_KEY+"-minutes",String(pomoMinutes));
+  document.querySelectorAll(".preset").forEach(x=>x.classList.toggle("active",x===b));
+  renderPomodoro();
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape")$("pomodoro")?.classList.add("hidden");
+  if(e.key===" " && document.activeElement?.tagName!=="INPUT" && document.activeElement?.tagName!=="TEXTAREA" && !$("pomodoro")?.classList.contains("hidden")){
+    e.preventDefault();togglePomodoro();
+  }
+});
+renderPomodoro();
+
+(function watchTocCount(){
+  const toc=document.getElementById("toc"), count=document.getElementById("tocCount");
+  if(!toc||!count)return;
+  const update=()=>{
+    const n=toc.querySelectorAll("button").length;
+    count.textContent=n?n+" chapters":"";
+  };
+  new MutationObserver(update).observe(toc,{childList:true,subtree:true});
+  update();
+})();

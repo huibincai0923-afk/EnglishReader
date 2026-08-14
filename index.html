@@ -10,66 +10,172 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">📖 English Reader</div>
-  <label class="file-btn">Import EPUB<input id="epubInput" type="file" accept=".epub" hidden></label>
-  <div class="book-meta"><b id="bookTitle">No book loaded</b><span id="bookAuthor"></span></div>
-  <select id="levelSelect" class="control" title="Vocabulary level">
-    <option value="B2">🟨 B2+ words & phrases</option>
-    <option value="C1">🟨 C1 only</option>
-  </select>
-  <select id="fontSize" class="control" title="Font size">
-    <option value="18">18px</option><option value="20">20px</option><option value="22">22px</option>
-    <option value="24">24px</option><option value="26">26px</option><option value="28">28px</option>
-    <option value="30">30px</option><option value="34">34px</option><option value="38">38px</option>
-    <option value="42">42px</option>
-  </select>
-  <button id="fontDown" class="control">A−</button><button id="fontUp" class="control">A+</button>
-  <button id="openVocab" class="control">📚 Vocabulary</button>
-  <button id="openNotes" class="control">📝 Notes</button>
-  <button id="openStats" class="control">📊 Reading</button>
-  <button id="marginBtn" class="control">↔ Margins</button>
-  <button id="theme" class="control">🌙</button>
+  <div class="brand">
+    <span class="brand-mark">E</span>
+    <span class="brand-name">English Reader</span>
+  </div>
+
+  <label class="file-btn primary">Open book<input id="epubInput" type="file" accept=".epub" hidden></label>
+
+  <div class="book-meta">
+    <b id="bookTitle">No book loaded</b>
+    <span id="bookAuthor"></span>
+  </div>
+
+  <div class="top-spacer"></div>
+
+  <div class="toolbar-group">
+    <select id="levelSelect" class="control" title="Vocabulary level">
+      <option value="B2">B2+ highlights</option>
+      <option value="C1">C1 only</option>
+    </select>
+    <select id="fontSize" class="control compact" title="Font size">
+      <option value="18">18</option><option value="20">20</option><option value="22">22</option>
+      <option value="24">24</option><option value="26">26</option><option value="28">28</option>
+      <option value="30">30</option><option value="34">34</option><option value="38">38</option>
+      <option value="42">42</option>
+    </select>
+    <button id="fontDown" class="icon-btn" title="Smaller text">A−</button>
+    <button id="fontUp" class="icon-btn" title="Larger text">A+</button>
+  </div>
+
+  <div class="toolbar-group secondary">
+    <button id="openVocab" class="control">Vocabulary</button>
+    <button id="openNotes" class="control">Notes</button>
+    <button id="openStats" class="control">Reading</button>
+    <button id="marginBtn" class="control">Margins</button>
+    <button id="openPomodoro" class="control focus-btn"><span class="focus-dot"></span> Focus</button>
+    <button id="theme" class="icon-btn" title="Toggle theme">◐</button>
+  </div>
 </header>
 
 <div class="layout">
   <aside id="sidebar">
-    <div class="side-title">Contents</div>
-    <nav id="toc"><small>Import an EPUB to see chapters.</small></nav>
-    <div class="legend">
-      <div><i class="swatch word"></i> B2+ word</div>
-      <div><i class="swatch phrase"></i> B2+ phrase</div>
-      <hr>
-      <div class="mark-row"><button class="mark-btn mark-red" data-mark="red">红</button><button class="mark-btn mark-yellow" data-mark="yellow">黄</button><button class="mark-btn mark-blue" data-mark="blue">蓝</button><button class="mark-btn mark-purple" data-mark="purple">紫</button><button class="mark-btn mark-green" data-mark="green">绿</button></div>
-      <small>Drag-select text to mark it.</small>
+    <div class="sidebar-head">
+      <div>
+        <div class="eyebrow">YOUR BOOK</div>
+        <div class="side-title">Contents</div>
+      </div>
+      <span class="toc-count" id="tocCount"></span>
+    </div>
+
+    <nav id="toc"><small>Open an EPUB to see chapters.</small></nav>
+
+    <div class="sidebar-card">
+      <div class="eyebrow">READING TOOLS</div>
+      <div class="legend-row"><i class="swatch word"></i><span>B2+ word</span></div>
+      <div class="legend-row"><i class="swatch phrase"></i><span>B2+ phrase</span></div>
+      <div class="mark-guide">
+        <span class="guide-label">Underline</span>
+        <div class="mark-row">
+          <button class="mark-btn mark-red" data-mark="red" aria-label="Red underline">♥</button>
+          <button class="mark-btn mark-yellow" data-mark="yellow" aria-label="Yellow underline">♥</button>
+          <button class="mark-btn mark-blue" data-mark="blue" aria-label="Blue underline">♥</button>
+          <button class="mark-btn mark-purple" data-mark="purple" aria-label="Purple underline">♥</button>
+          <button class="mark-btn mark-green" data-mark="green" aria-label="Green underline">♥</button>
+        </div>
+      </div>
+      <div class="sidebar-hint">Select any text to mark it.</div>
+    </div>
+
+    <div class="sidebar-footer">
+      <span>Made for slow reading.</span>
+      <span>v5.1</span>
     </div>
   </aside>
 
   <main id="main">
-    <div id="viewer"><div class="empty">Import an EPUB to start reading.</div></div>
+    <div class="reading-header">
+      <div class="reading-mode">READING SPACE</div>
+      <div class="reading-tools">
+        <span id="sessionStatus">Ready when you are.</span>
+      </div>
+    </div>
+
+    <div id="viewer"><div class="empty">
+      <div class="empty-inner">
+        <div class="empty-icon">E</div>
+        <h2>Your English reading space</h2>
+        <p>Open an EPUB and settle in.</p>
+        <label class="empty-open">Choose a book<input type="file" accept=".epub" hidden onchange="this.files[0]&&openBook(this.files[0])"></label>
+      </div>
+    </div></div>
+
     <div class="bottom">
-      <button id="prev" disabled>← Previous</button>
+      <button id="prev" class="nav-btn" disabled>←</button>
       <span id="location">0%</span>
       <div class="progress"><span id="progressFill"></span></div>
-      <button id="next" disabled>Next →</button>
+      <button id="next" class="nav-btn" disabled>→</button>
     </div>
   </main>
 </div>
 
+<!-- Word popup -->
 <div id="popup" class="popup hidden">
   <button id="close" class="x">×</button>
+  <div class="popup-kicker">VOCABULARY</div>
   <div id="word" class="popup-word"></div>
   <div id="pron" class="popup-meta"></div>
   <div id="meaning" class="popup-meaning"></div>
-  <div class="popup-actions"><button id="save">⭐ Add to vocabulary</button></div>
+  <div class="popup-actions"><button id="save" class="save-btn">Save to vocabulary</button></div>
 </div>
+
 <div id="toast" class="toast hidden"></div>
 
+<!-- Drawer -->
 <div id="drawer" class="drawer hidden">
   <div class="drawer-head">
-    <b id="drawerTitle">Vocabulary</b><button id="drawerClose">×</button>
+    <div>
+      <div class="eyebrow">LIBRARY</div>
+      <b id="drawerTitle">Vocabulary</b>
+    </div>
+    <button id="drawerClose" class="drawer-close">×</button>
   </div>
   <div id="drawerBody" class="drawer-body"></div>
 </div>
-<script src="app.js?v=50"></script>
+
+<!-- Pomodoro -->
+<div id="pomodoro" class="pomodoro hidden">
+  <div class="pomo-card">
+    <div class="pomo-head">
+      <div>
+        <div class="eyebrow">FOCUS TIMER</div>
+        <h3 id="pomoMode">Focus</h3>
+      </div>
+      <button id="pomoClose" class="drawer-close">×</button>
+    </div>
+
+    <div class="timer-ring" id="timerRing" style="--progress: 0deg">
+      <div class="timer-core">
+        <div id="pomoTime">25:00</div>
+        <span id="pomoHint">deep reading</span>
+      </div>
+    </div>
+
+    <div class="pomo-controls">
+      <button id="pomoReset" class="pomo-ghost">Reset</button>
+      <button id="pomoStart" class="pomo-start">Start focus</button>
+      <button id="pomoSkip" class="pomo-ghost">Skip</button>
+    </div>
+
+    <div class="pomo-presets">
+      <button data-preset="25" class="preset active">25 min</button>
+      <button data-preset="45" class="preset">45 min</button>
+      <button data-preset="50" class="preset">50 min</button>
+    </div>
+
+    <div class="pomo-divider"></div>
+
+    <div class="pomo-stats">
+      <div><span id="pomoToday">0</span><small>focus sessions today</small></div>
+      <div><span id="pomoTotal">0</span><small>sessions completed</small></div>
+      <div><span id="pomoMinutes">0m</span><small>focus time</small></div>
+    </div>
+
+    <p class="pomo-note">A quiet timer for reading. When a session ends, take a short break before starting again.</p>
+  </div>
+</div>
+
+<script src="app.js?v=51"></script>
 </body>
 </html>

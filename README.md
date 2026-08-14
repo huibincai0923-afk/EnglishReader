@@ -76,3 +76,10 @@ The included vocabulary file is a starter CEFR-oriented dataset. It does not red
 - The last selected color is remembered.
 - Marks are stored by EPUB CFI and restored after navigation/reopening.
 - Existing Vocabulary, notes, reading statistics, finished books, vocabulary highlighting, and margin controls are preserved from V4.4.
+
+
+## V5.1 — Editorial UI + Focus Timer
+- Redesigned the interface with a restrained editorial aesthetic inspired by modern reading apps.
+- Added a dedicated Focus/Pomodoro panel with 25/45/50-minute presets.
+- Timer supports start/pause, reset, skip, session counts, total focus minutes, persistence, and keyboard shortcuts.
+- Existing V5 CFI marking, vocabulary, notes, reading statistics, finished books, highlighting, margins, and EPUB reading behavior are preserved.
