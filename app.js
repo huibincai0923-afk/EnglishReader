@@ -10,7 +10,6 @@ function safeJSON(key,fallback){
     return fallback;
   }
 }
-let highlightLevel=localStorage.getItem("highlight-level")||"B2";
 let current=null, markColor=localStorage.getItem("reader-mark-color")||"yellow";
 let currentCfi="", currentChapter="";
 let notes=safeJSON("reader-notes",[]);
@@ -24,9 +23,7 @@ let readerMargin=localStorage.getItem("reader-margin")||"medium";
 let marks=safeJSON("reader-marks-v34",safeJSON("reader-marks",[]));
 
 const $=id=>document.getElementById(id);
-fetch("vocabulary.json").then(r=>r.json()).then(d=>{
-  DATA=d;$("levelSelect").value=highlightLevel;
-}).catch(console.error);
+fetch("vocabulary.json").then(r=>r.json()).then(d=>{DATA=d}).catch(console.error);
 
 $("epubInput").addEventListener("change",e=>e.target.files[0]&&openBook(e.target.files[0]));
 $("prev").onclick=()=>rendition?.prev();$("next").onclick=()=>rendition?.next();
@@ -39,10 +36,10 @@ $("fontSize").onchange=()=>{let n=$("fontSize").value;localStorage.setItem("read
 const savedFont=localStorage.getItem("reader-font-family")||"Georgia";
 $("fontFamily").value=savedFont;
 function applyReadingFont(){
-  const f=$("fontFamily")?.value||localStorage.getItem("reader-font-family")||"Georgia";
+  let f=$("fontFamily")?.value||localStorage.getItem("reader-font-family")||"Georgia";
+  if(f==="Arial"){f="Georgia"; if($("fontFamily"))$("fontFamily").value="Georgia";}
   const n=$("fontSize")?.value||localStorage.getItem("reader-font-size")||"18";
-  const stack=f==="Arial" ? "Arial, Helvetica, sans-serif" :
-              f==="Helvetica" ? "Helvetica, Arial, sans-serif" :
+  const stack=f==="Helvetica" ? "Helvetica, Arial, sans-serif" :
               "Georgia, 'Times New Roman', serif";
   localStorage.setItem("reader-font-family",f);
   localStorage.setItem("reader-font-size",n);
@@ -70,7 +67,6 @@ function applyReadingFont(){
 $("fontFamily").onchange=applyReadingFont;
 $("fontUp").onclick=()=>{$("fontSize").value=String(Math.min(42,Number($("fontSize").value)+2));$("fontSize").dispatchEvent(new Event("change"))};
 $("fontDown").onclick=()=>{$("fontSize").value=String(Math.max(18,Number($("fontSize").value)-2));$("fontSize").dispatchEvent(new Event("change"))};
-$("levelSelect").onchange=()=>{highlightLevel=$("levelSelect").value;localStorage.setItem("highlight-level",highlightLevel);rendition?.views().forEach(v=>decorate(v.document))};
 
 $("close").onclick=()=>$("popup").classList.add("hidden");
 $("save").onclick=()=>{
@@ -126,16 +122,16 @@ function renderDrawer(type){
     const savedMarks=JSON.parse(localStorage.getItem("reader-marks-v5")||localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks")||"[]");
     const items=savedMarks.filter(x=>x&&x.text&&x.text.trim()).slice().reverse();
     if(!items.length){
-      body.innerHTML='<div class="notes-empty"><div class="notes-empty-mark">♥</div><h3>No marks yet</h3><p>Select a passage and underline it. Your marked text will appear here automatically.</p></div>';
+      body.innerHTML='<div class="notes-empty"><h3>No annotations yet</h3><p>Underline a passage while reading. Your saved passages will appear here.</p></div>';
       return;
     }
     body.innerHTML=items.map((n,i)=>{
       const c=n.color||"yellow";
       const label=(n.chapter||currentChapter||"Current chapter").split("#")[0];
       return `<div class="note-item auto-note">
-        <div class="note-ref"><span class="note-color-dot ${escapeHtml(c)}"></span>${escapeHtml(label)} · ${new Date(n.at||Date.now()).toLocaleString()}</div>
+        <div class="note-ref"><span class="note-color-dot ${escapeHtml(c)}"></span><span>${escapeHtml(label)}</span></div>
         <div class="note-text">${escapeHtml(n.text)}</div>
-        <div class="note-actions"><button class="item-delete" data-mark-note="${items.length-1-i}">Remove mark</button></div>
+        <div class="note-actions"><button class="item-delete" data-mark-note="${items.length-1-i}" aria-label="Remove mark">Remove</button></div>
       </div>`;
     }).join("");
     body.querySelectorAll("[data-mark-note]").forEach(b=>b.onclick=()=>{
@@ -561,6 +557,8 @@ function installBrowserMarking(host){
     const r=range.getBoundingClientRect(),p=palette.getBoundingClientRect();
     palette.style.left=Math.max(8,Math.min(innerWidth-p.width-8,r.left+r.width/2-p.width/2))+"px";
     palette.style.top=Math.max(8,r.top-p.height-10)+"px";
+    palette.style.cursor="grab";
+    makePaletteMovable(palette,3000);
 
     palette.querySelectorAll("button").forEach(b=>{
       b.classList.toggle("active",b.dataset.c===markColor);
@@ -623,10 +621,72 @@ async function buildToc(){
  if(!items.length)$("toc").innerHTML="<small>No table of contents found.</small>";
 }
 
-function allowed(level){
- return highlightLevel==="B2" ? (level==="B2"||level==="C1") : level==="C1";
-}
 function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}
+
+function makePaletteMovable(palette,autoHideMs=3000){
+  if(!palette)return;
+  let timer=null, dragging=false, sx=0,sy=0,ox=0,oy=0;
+  const schedule=()=>{
+    clearTimeout(timer);
+    timer=setTimeout(()=>{if(palette.isConnected)palette.remove()},autoHideMs);
+  };
+  palette.addEventListener("pointerdown",e=>{
+    if(e.target.closest("button")){schedule();return;}
+    dragging=true;
+    const r=palette.getBoundingClientRect();
+    sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top;
+    palette.setPointerCapture?.(e.pointerId);
+    palette.style.cursor="grabbing";
+    clearTimeout(timer);
+  });
+  palette.addEventListener("pointermove",e=>{
+    if(!dragging)return;
+    palette.style.left=Math.max(6,Math.min(innerWidth-palette.offsetWidth-6,ox+e.clientX-sx))+"px";
+    palette.style.top=Math.max(6,Math.min(innerHeight-palette.offsetHeight-6,oy+e.clientY-sy))+"px";
+  });
+  palette.addEventListener("pointerup",e=>{
+    dragging=false; palette.style.cursor="grab"; schedule();
+  });
+  palette.addEventListener("pointercancel",()=>{dragging=false;schedule()});
+  schedule();
+}
+function wordFamilyVariants(key){
+  const k=String(key||"").toLowerCase().trim();
+  if(!k || !/^[a-z]+$/.test(k)) return [k];
+  const out=new Set([k]);
+  const add=x=>{if(x&&x.length>=3)out.add(x)};
+
+  if(/[^aeiou]y$/.test(k)){
+    add(k.slice(0,-1)+"ies"); add(k.slice(0,-1)+"ied"); add(k.slice(0,-1)+"ying");
+  }else if(/e$/.test(k)){
+    add(k+"s"); add(k+"d"); add(k.slice(0,-1)+"ing");
+  }else{
+    add(k+"s"); add(k+"ed"); add(k+"ing");
+  }
+  if(/(s|x|z|ch|sh|o)$/.test(k)) add(k+"es");
+
+  // analyze/analyse family, including the noun analysis/analyses.
+  if(k.endsWith("ize")){
+    const stem=k.slice(0,-3);
+    add(stem+"izes"); add(stem+"ized"); add(stem+"izing");
+    add(stem+"ise"); add(stem+"ises"); add(stem+"ised"); add(stem+"ising");
+    if(k.endsWith("yze")){
+      const nounStem=k.slice(0,-3);
+      add(nounStem+"ysis"); add(nounStem+"yses");
+    }
+  }else if(k.endsWith("ise")){
+    const stem=k.slice(0,-3);
+    add(stem+"ises"); add(stem+"ised"); add(stem+"ising");
+    add(stem+"ize"); add(stem+"izes"); add(stem+"ized"); add(stem+"izing");
+  }
+  return [...out];
+}
+
+function wordFamilyRegex(key){
+  const variants=wordFamilyVariants(key).filter(Boolean).sort((a,b)=>b.length-a.length);
+  return new RegExp("\\b(?:"+variants.map(esc).join("|")+")\\b","gi");
+}
+
 
 
 function decorate(doc){
@@ -634,10 +694,10 @@ function decorate(doc){
 
   // Only decorate plain text nodes. Existing vocabulary spans and user marks are skipped.
   const phraseKeys=Object.keys(DATA.phrases)
-    .filter(k=>allowed(DATA.phrases[k].cefr))
+    
     .sort((a,b)=>b.length-a.length);
   const wordKeys=Object.keys(DATA.words)
-    .filter(k=>allowed(DATA.words[k].cefr))
+    
     .sort((a,b)=>b.length-a.length);
 
   const walker=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT);
@@ -660,7 +720,7 @@ function decorate(doc){
     });
 
     wordKeys.forEach(key=>{
-      const re=new RegExp("\\b"+esc(key)+"\\b","gi");
+      const re=wordFamilyRegex(key);
       let m;
       while((m=re.exec(source))){
         matches.push({i:m.index,j:m.index+m[0].length,key,mkind:"word"});

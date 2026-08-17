@@ -103,3 +103,15 @@ The included vocabulary file is a starter CEFR-oriented dataset. It does not red
 
 ## V5.5 — Compatibility Stabilization
 Built from V5.3. Hardened localStorage parsing, EPUB opening isolation, multi-node marking, palette dismissal, and explicit font stacks while preserving the V5.2/V5.3 annotation architecture.
+
+
+## V5.6 — Word-Family Highlighting
+A vocabulary entry now highlights matching forms throughout the book. The analyze family includes analyze, analyzes, analyzed, analyzing, analyse, analyses, analysed, analysing, analysis, while clicked variants still open the canonical dictionary entry.
+
+
+## V5.7 — UI Refinement
+- Renamed Web annotations to **Annotations**.
+- Removed the B2/C1 highlight-level selector and related UI; vocabulary highlighting now uses the full vocabulary dataset without CEFR filtering.
+- Removed Arial; Georgia and Helvetica remain.
+- Notes redesigned as clean reading-software-style passage cards with minimal metadata.
+- Five-color heart palette is movable and automatically hides after 3 seconds.
