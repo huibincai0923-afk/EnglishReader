@@ -313,13 +313,13 @@ body.browser-annotation-active #extensionReader{display:block!important}
   font-size:var(--reader-size,18px)!important
 }
 
-/* V5.4 — explicit browser-safe font stacks */
+/* V5.5 — explicit font stacks */
 #extensionReader[data-font="Arial"] .extension-chapter,
 #extensionReader[data-font="Arial"] .extension-chapter-content,
-#extensionReader[data-font="Arial"] .extension-chapter-content *{font-family:Arial,sans-serif!important}
+#extensionReader[data-font="Arial"] .extension-chapter-content *{font-family:Arial,Helvetica,sans-serif!important}
 #extensionReader[data-font="Helvetica"] .extension-chapter,
 #extensionReader[data-font="Helvetica"] .extension-chapter-content,
 #extensionReader[data-font="Helvetica"] .extension-chapter-content *{font-family:Helvetica,Arial,sans-serif!important}
 #extensionReader[data-font="Georgia"] .extension-chapter,
 #extensionReader[data-font="Georgia"] .extension-chapter-content,
-#extensionReader[data-font="Georgia"] .extension-chapter-content *{font-family:Georgia,serif!important}
+#extensionReader[data-font="Georgia"] .extension-chapter-content *{font-family:Georgia,"Times New Roman",serif!important}

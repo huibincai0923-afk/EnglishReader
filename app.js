@@ -1,16 +1,27 @@
 let DATA={words:{},phrases:{}},book=null,rendition=null,locations=null;
+function safeJSON(key,fallback){
+  try{
+    const raw=localStorage.getItem(key);
+    if(!raw)return fallback;
+    const value=JSON.parse(raw);
+    return value??fallback;
+  }catch(e){
+    try{localStorage.removeItem(key)}catch(_){}
+    return fallback;
+  }
+}
 let highlightLevel=localStorage.getItem("highlight-level")||"B2";
 let current=null, markColor=localStorage.getItem("reader-mark-color")||"yellow";
 let currentCfi="", currentChapter="";
-let notes=JSON.parse(localStorage.getItem("reader-notes")||"[]");
-let vocab=JSON.parse(localStorage.getItem("reader-vocab")||"[]");
+let notes=safeJSON("reader-notes",[]);
+let vocab=safeJSON("reader-vocab",[]);
 let sessionStarted=0;
 let lastActivity=0;
 let timerInterval=null;
 let activeBookId="";
-let library=JSON.parse(localStorage.getItem("reader-library")||"[]");
+let library=safeJSON("reader-library",[]);
 let readerMargin=localStorage.getItem("reader-margin")||"medium";
-let marks=JSON.parse(localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks")||"[]");
+let marks=safeJSON("reader-marks-v34",safeJSON("reader-marks",[]));
 
 const $=id=>document.getElementById(id);
 fetch("vocabulary.json").then(r=>r.json()).then(d=>{
@@ -30,25 +41,27 @@ $("fontFamily").value=savedFont;
 function applyReadingFont(){
   const f=$("fontFamily")?.value||localStorage.getItem("reader-font-family")||"Georgia";
   const n=$("fontSize")?.value||localStorage.getItem("reader-font-size")||"18";
+  const stack=f==="Arial" ? "Arial, Helvetica, sans-serif" :
+              f==="Helvetica" ? "Helvetica, Arial, sans-serif" :
+              "Georgia, 'Times New Roman', serif";
   localStorage.setItem("reader-font-family",f);
   localStorage.setItem("reader-font-size",n);
-  if(rendition){
-    try{
-      rendition.themes.fontFamily(f);
+  try{
+    if(rendition){
+      rendition.themes.fontFamily(stack);
       rendition.themes.fontSize(n+"px");
-    }catch(e){}
-  }
-  const host=document.getElementById("extensionReader");
+    }
+  }catch(_){}
+  const host=$("extensionReader");
   if(host){
-    host.style.setProperty("--reader-font",f);
-    host.style.setProperty("--reader-size",n+"px");
     host.dataset.font=f;
-    const cssFont = f==="Arial" ? "Arial, sans-serif" : (f==="Helvetica" ? "Helvetica, Arial, sans-serif" : "Georgia, serif");
-    host.style.setProperty("font-family",cssFont,"important");
+    host.style.setProperty("--reader-font",stack);
+    host.style.setProperty("--reader-size",n+"px");
+    host.style.setProperty("font-family",stack,"important");
+    host.style.setProperty("font-size",n+"px","important");
     host.querySelectorAll(".extension-chapter-content, .extension-chapter-content *").forEach(el=>{
-      if(!el.closest("pre,code,svg")){
-        const cssFont = f==="Arial" ? "Arial, sans-serif" : (f==="Helvetica" ? "Helvetica, Arial, sans-serif" : "Georgia, serif");
-        el.style.setProperty("font-family",cssFont,"important");
+      if(!el.closest("pre,code,svg,img")){
+        el.style.setProperty("font-family",stack,"important");
         el.style.setProperty("font-size",n+"px","important");
       }
     });
@@ -316,9 +329,14 @@ async function openBook(file){
     ".user-mark.mark-green":{borderBottom:"3px solid #8eaa8e !important"}
   });
   rendition.on("rendered",(_,view)=>setTimeout(()=>{
-    decorate(view.document);restoreMarks(view.document);installMarking(view);
-    extensionChapterView=view;
-    renderExtensionReader(view);
+    try{
+      decorate(view.document);restoreMarks(view.document);installMarking(view);
+      extensionChapterView=view;renderExtensionReader(view);
+    }catch(e){
+      console.warn("Annotation mirror skipped:",e);
+      const host=$("extensionReader"); if(host)host.style.display="none";
+      document.body.classList.remove("browser-annotation-active");
+    }
   },40));
   rendition.on("relocated",loc=>{
     if(loc?.start){
@@ -414,34 +432,14 @@ function renderExtensionReader(view){
   installMarkInteraction(host);
   document.body.classList.toggle("browser-annotation-active",browserAnnotationMode);
   if(iframe)iframe.style.display=browserAnnotationMode?"none":"block";
-  host.style.display=browserAnnotationMode?"block":"none";
+  host.style.display=browserAnnotationMode&&host.innerHTML.trim()?"block":"none";
+  if(!host.innerHTML.trim()){
+    document.body.classList.remove("browser-annotation-active");
+    const frame=document.querySelector("#viewer iframe"); if(frame)frame.style.display="block";
+  }
   applyReadingFont();
 }
 
-
-
-const MAX_STORED_MARKS=300;
-function readStoredMarks(){
-  try{
-    const raw=localStorage.getItem("reader-marks-v5");
-    const parsed=raw?JSON.parse(raw):[];
-    return Array.isArray(parsed)?parsed.filter(x=>x&&typeof x.text==="string").slice(-MAX_STORED_MARKS):[];
-  }catch(e){ return []; }
-}
-function writeStoredMarks(items){
-  const safe=Array.isArray(items)?items.slice(-MAX_STORED_MARKS):[];
-  try{ localStorage.setItem("reader-marks-v5",JSON.stringify(safe)); }
-  catch(e){
-    // If a browser extension or unusually large selection pushes storage over quota,
-    // progressively retain fewer marks instead of breaking the reader.
-    for(let n=Math.min(100,safe.length);n>=10;n=Math.floor(n/2)){
-      try{localStorage.setItem("reader-marks-v5",JSON.stringify(safe.slice(-n)));return safe.slice(-n)}catch(_){}
-    }
-    try{localStorage.removeItem("reader-marks-v5")}catch(_){}
-    return [];
-  }
-  return safe;
-}
 
 function installMarkInteraction(host){
   if(host.__markInteractionInstalled)return;
@@ -453,9 +451,8 @@ function installMarkInteraction(host){
     const link=e.target.closest?.("a");
     if(link && host.contains(link)){
       const href=link.getAttribute("href")||"";
-      if(href){
-        e.preventDefault();e.stopPropagation();
-        return;
+      if(href && !/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)){
+        e.preventDefault();e.stopPropagation();return;
       }
     }
 
@@ -482,14 +479,14 @@ function installMarkInteraction(host){
       while(mark.firstChild) parent.insertBefore(mark.firstChild,mark);
       mark.remove();
 
-      const saved=readStoredMarks();
+      const saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]");
       const pos=saved.findIndex(x=>
         (x.text||"").replace(/\s+/g," ").trim()===text &&
         (x.chapter||"")===currentChapter
       );
       if(pos>=0)saved.splice(pos,1);
-      const persisted=writeStoredMarks(saved);
-      marks=persisted;
+      localStorage.setItem("reader-marks-v5",JSON.stringify(saved));
+      marks=saved;
       close();
       toast("Underline removed");
       if(!$("drawer").classList.contains("hidden") && $("drawerTitle").textContent==="Notes") renderDrawer("Notes");
@@ -504,33 +501,67 @@ function installMarkInteraction(host){
 function installBrowserMarking(host){
   if(host.__browserMarkingInstalled)return;
   host.__browserMarkingInstalled=true;
-
   let palette=null,pendingText="",pendingRange=null;
 
   const hide=()=>{
-    if(palette) palette.remove();
+    if(palette)palette.remove();
     palette=null;pendingText="";pendingRange=null;
   };
   const closePalette=()=>{
-    if(palette) palette.remove();
+    if(palette)palette.remove();
     palette=null;
   };
 
+  function wrapRangeSafely(range,color){
+    const walker=document.createTreeWalker(host,NodeFilter.SHOW_TEXT);
+    const nodes=[]; let node;
+    while(node=walker.nextNode()){
+      if(!node.nodeValue?.trim())continue;
+      try{if(range.intersectsNode(node))nodes.push(node)}catch(_){}
+    }
+    if(!nodes.length)return false;
+
+    const first=nodes[0], last=nodes[nodes.length-1];
+    nodes.forEach((textNode,i)=>{
+      const full=textNode.nodeValue;
+      let a=(i===0&&textNode===range.startContainer)?range.startOffset:0;
+      let b=(i===nodes.length-1&&textNode===range.endContainer)?range.endOffset:full.length;
+      a=Math.max(0,Math.min(a,full.length)); b=Math.max(a,Math.min(b,full.length));
+      if(a===b)return;
+      const parent=textNode.parentNode;
+      if(!parent)return;
+      const before=document.createTextNode(full.slice(0,a));
+      const mark=document.createElement("span");
+      mark.className="user-mark mark-"+color;
+      mark.dataset.markColor=color;
+      mark.textContent=full.slice(a,b);
+      const after=document.createTextNode(full.slice(b));
+      const frag=document.createDocumentFragment();
+      if(before.nodeValue)frag.appendChild(before);
+      frag.appendChild(mark);
+      if(after.nodeValue)frag.appendChild(after);
+      parent.replaceChild(frag,textNode);
+    });
+    return true;
+  }
+
   const show=()=>{
     const sel=window.getSelection();
-    if(!sel || sel.rangeCount===0 || sel.isCollapsed)return;
+    if(!sel||sel.rangeCount===0||sel.isCollapsed)return;
     const text=sel.toString().replace(/\s+/g," ").trim();
     const range=sel.getRangeAt(0);
-    if(!text || !host.contains(range.commonAncestorContainer))return;
+    if(!text||!host.contains(range.commonAncestorContainer))return;
+    if(palette)palette.remove();
+    pendingText=text; pendingRange=range.cloneRange();
 
-    pendingText=text;pendingRange=range.cloneRange();
     palette=document.createElement("div");
     palette.className="v5-mark-palette";
-    palette.innerHTML='<button data-c="red">❤️</button><button data-c="yellow">🧡</button><button data-c="blue">💙</button><button data-c="purple">💜</button><button data-c="green">💚</button>';
+    palette.innerHTML='<button type="button" data-c="red">❤️</button><button type="button" data-c="yellow">🧡</button><button type="button" data-c="blue">💙</button><button type="button" data-c="purple">💜</button><button type="button" data-c="green">💚</button>';
     document.body.appendChild(palette);
-    const r=range.getBoundingClientRect(), p=palette.getBoundingClientRect();
+    const r=range.getBoundingClientRect(),p=palette.getBoundingClientRect();
     palette.style.left=Math.max(8,Math.min(innerWidth-p.width-8,r.left+r.width/2-p.width/2))+"px";
     palette.style.top=Math.max(8,r.top-p.height-10)+"px";
+
     palette.querySelectorAll("button").forEach(b=>{
       b.classList.toggle("active",b.dataset.c===markColor);
       b.addEventListener("pointerdown",e=>{
@@ -539,38 +570,35 @@ function installBrowserMarking(host){
         closePalette();
         setTimeout(()=>applyBrowserMark(color),0);
       },true);
-      b.onclick=e=>{e.preventDefault();e.stopPropagation();};
+      b.onclick=e=>{e.preventDefault();e.stopPropagation()};
     });
   };
 
   function applyBrowserMark(color){
-    if(!pendingRange||!pendingText){hide();return;}
-    const span=document.createElement("span");
-    span.className="user-mark mark-"+color;
-    span.dataset.markColor=color;
-    try{
-      pendingRange.surroundContents(span);
-    }catch(e){
-      // For selections spanning multiple DOM nodes, use an extracted fragment.
-      const frag=pendingRange.extractContents();
-      span.appendChild(frag);
-      pendingRange.insertNode(span);
-    }
-    closePalette();
-    try{window.getSelection().removeAllRanges()}catch(e){}
-    const rec={text:pendingText,color,chapter:currentChapter||"Current chapter",cfi:currentCfi,at:Date.now()};
-    const saved=readStoredMarks();
-    saved.push(rec);
-    marks=writeStoredMarks(saved);
-    markColor=color;localStorage.setItem("reader-mark-color",color);setMarkColor(color,false);
+    const range=pendingRange, text=pendingText;
+    if(!range||!text){hide();return}
+    let ok=false;
+    try{ok=wrapRangeSafely(range,color)}catch(e){console.warn("Marking failed",e)}
+    if(!ok){hide();toast("Could not mark this selection");return}
+    hide();
+    try{window.getSelection().removeAllRanges()}catch(_){}
+    const rec={text,color,chapter:currentChapter||"Current chapter",cfi:currentCfi,at:Date.now()};
+    let saved=safeJSON("reader-marks-v5",[]);
+    if(!Array.isArray(saved))saved=[];
+    saved.push(rec); saved=saved.slice(-500);
+    try{localStorage.setItem("reader-marks-v5",JSON.stringify(saved))}catch(_){}
+    marks=saved;
+    markColor=color;
+    try{localStorage.setItem("reader-mark-color",color)}catch(_){}
+    setMarkColor(color,false);
     toast("Marked · added to Notes");
-    if(!$("drawer").classList.contains("hidden") && $("drawerTitle").textContent==="Notes")renderDrawer("Notes");
+    if(!$("drawer").classList.contains("hidden")&&$("drawerTitle").textContent==="Notes")renderDrawer("Notes");
   }
 
   host.addEventListener("mouseup",()=>setTimeout(show,30),true);
   host.addEventListener("touchend",()=>setTimeout(show,50),true);
   document.addEventListener("mousedown",e=>{
-    if(palette && !palette.contains(e.target) && !host.contains(e.target))hide();
+    if(palette&&!palette.contains(e.target)&&!host.contains(e.target))hide();
   },true);
 }
 

@@ -101,8 +101,5 @@ The included vocabulary file is a starter CEFR-oriented dataset. It does not red
 - Relative EPUB links in the mirrored top-level reader are prevented from navigating the Vercel SPA to a `NOT_FOUND` route.
 
 
-## V5.4 — Stable Marking & Arial
-- Mark storage is capped and quota-safe to prevent localStorage overflow and reader failure after many annotations.
-- Palette uses pointer events and closes visually before applying a mark, while preserving the selected range.
-- Relative and EPUB-internal links in the mirrored reading surface are blocked from navigating the Vercel app, avoiding NOT_FOUND routes.
-- Arial and Helvetica now use explicit browser-safe font stacks and are applied to the actual rendered DOM.
+## V5.5 — Compatibility Stabilization
+Built from V5.3. Hardened localStorage parsing, EPUB opening isolation, multi-node marking, palette dismissal, and explicit font stacks while preserving the V5.2/V5.3 annotation architecture.
