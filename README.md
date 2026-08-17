@@ -115,3 +115,11 @@ A vocabulary entry now highlights matching forms throughout the book. The analyz
 - Removed Arial; Georgia and Helvetica remain.
 - Notes redesigned as clean reading-software-style passage cards with minimal metadata.
 - Five-color heart palette is movable and automatically hides after 3 seconds.
+
+
+## V5.8 — Per-Book Cache & Notes Fix
+- Notes and annotations are now cached per EPUB using a stable book identifier.
+- Reopening the same book restores its saved underlines/annotations and last reading position.
+- Vocabulary is also cached per book and restored on reopen.
+- Notes deletion now uses a stable annotation ID instead of a list index, preventing deletion failures when filtered/reordered entries exist.
+- Legacy V5.2/V5.3 storage keys remain synchronized for compatibility.

@@ -71,10 +71,11 @@ $("fontDown").onclick=()=>{$("fontSize").value=String(Math.max(18,Number($("font
 $("close").onclick=()=>$("popup").classList.add("hidden");
 $("save").onclick=()=>{
   if(!current)return;
-  vocab=JSON.parse(localStorage.getItem("reader-vocab")||"[]");
+  vocab=Array.isArray(vocab)?vocab:safeJSON("reader-vocab",[]);
   if(!vocab.some(x=>x.text.toLowerCase()===current.text.toLowerCase())){
     vocab.push({...current,addedAt:Date.now()});
     localStorage.setItem("reader-vocab",JSON.stringify(vocab));
+    saveBookCache();
   }
   $("popup").classList.add("hidden");
   toast("Added to vocabulary");
@@ -113,13 +114,13 @@ function renderDrawer(type){
         <div class="note-actions"><button class="item-delete" data-vocab="${vocab.length-1-i}">Delete</button></div>
       </div>`).join("");
     body.querySelectorAll("[data-vocab]").forEach(b=>b.onclick=()=>{
-      vocab.splice(Number(b.dataset.vocab),1);localStorage.setItem("reader-vocab",JSON.stringify(vocab));renderDrawer("Vocabulary");
+      vocab.splice(Number(b.dataset.vocab),1);localStorage.setItem("reader-vocab",JSON.stringify(vocab));saveBookCache();renderDrawer("Vocabulary");
     });
     return;
   }
 
   if(type==="Notes"){
-    const savedMarks=JSON.parse(localStorage.getItem("reader-marks-v5")||localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks")||"[]");
+    const savedMarks=Array.isArray(marks)?marks:[];
     const items=savedMarks.filter(x=>x&&x.text&&x.text.trim()).slice().reverse();
     if(!items.length){
       body.innerHTML='<div class="notes-empty"><h3>No annotations yet</h3><p>Underline a passage while reading. Your saved passages will appear here.</p></div>';
@@ -128,19 +129,22 @@ function renderDrawer(type){
     body.innerHTML=items.map((n,i)=>{
       const c=n.color||"yellow";
       const label=(n.chapter||currentChapter||"Current chapter").split("#")[0];
+      const id=n.id||("legacy-"+i);
       return `<div class="note-item auto-note">
         <div class="note-ref"><span class="note-color-dot ${escapeHtml(c)}"></span><span>${escapeHtml(label)}</span></div>
         <div class="note-text">${escapeHtml(n.text)}</div>
-        <div class="note-actions"><button class="item-delete" data-mark-note="${items.length-1-i}" aria-label="Remove mark">Remove</button></div>
+        <div class="note-actions"><button class="item-delete" data-mark-id="${escapeHtml(id)}" aria-label="Remove mark">Remove</button></div>
       </div>`;
     }).join("");
-    body.querySelectorAll("[data-mark-note]").forEach(b=>b.onclick=()=>{
-      const idx=Number(b.dataset.markNote);
-      const marksNow=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]");
-      marksNow.splice(idx,1);
-      localStorage.setItem("reader-marks-v5",JSON.stringify(marksNow));
+    body.querySelectorAll("[data-mark-id]").forEach(b=>b.onclick=()=>{
+      const id=b.dataset.markId;
+      const pos=marks.findIndex(x=>String(x.id||"")===String(id));
+      if(pos<0){toast("Annotation not found");return;}
+      marks.splice(pos,1);
+      try{localStorage.setItem("reader-marks-v5",JSON.stringify(marks));}catch(_){}
+      saveBookCache();
       renderDrawer("Notes");
-      toast("Mark removed");
+      toast("Annotation removed");
     });
     return;
   }
@@ -209,6 +213,46 @@ document.addEventListener("visibilitychange",()=>{if(document.hidden)lastActivit
 function bookId(meta,file){
   return (meta?.identifier||"")+"|"+(meta?.title||file.name);
 }
+function cacheKey(id){ return "reader-book-cache-v1-"+encodeURIComponent(String(id||"")); }
+function loadBookCache(id){
+  const empty={marks:[],vocab:[],cfi:""};
+  if(!id)return empty;
+  const data=safeJSON(cacheKey(id),empty);
+  return {
+    marks:Array.isArray(data?.marks)?data.marks:[],
+    vocab:Array.isArray(data?.vocab)?data.vocab:[],
+    cfi:typeof data?.cfi==="string"?data.cfi:""
+  };
+}
+function saveBookCache(){
+  if(!activeBookId)return;
+  const data={
+    marks:Array.isArray(marks)?marks.slice(-500):[],
+    vocab:Array.isArray(vocab)?vocab.slice(-1000):[],
+    cfi:currentCfi||""
+  };
+  try{localStorage.setItem(cacheKey(activeBookId),JSON.stringify(data));}catch(e){
+    // If storage is full, keep the most useful data and retry.
+    try{
+      data.marks=data.marks.slice(-200);
+      data.vocab=data.vocab.slice(-300);
+      localStorage.setItem(cacheKey(activeBookId),JSON.stringify(data));
+    }catch(_){}
+  }
+}
+function activateBookCache(id){
+  const data=loadBookCache(id);
+  marks=data.marks;
+  vocab=data.vocab;
+  if(data.cfi)currentCfi=data.cfi;
+  // Keep the legacy keys in sync for compatibility with V5.2/V5.3 data.
+  try{
+    localStorage.setItem("reader-marks-v5",JSON.stringify(marks));
+    localStorage.setItem("reader-vocab",JSON.stringify(vocab));
+    if(currentCfi)localStorage.setItem("reader-cfi",currentCfi);
+  }catch(_){}
+}
+
 function updateLibrary(meta,file,progress){
   library=JSON.parse(localStorage.getItem("reader-library")||"[]");
   const id=bookId(meta,file);
@@ -281,7 +325,7 @@ applyReaderMargin();
 function restoreV5Marks(){
   if(!book?.rendition)return;
   let saved=[];
-  try{saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]")}catch(e){}
+  try{saved=Array.isArray(marks)?marks:[]}catch(e){}
   saved.forEach(m=>{
     if(!m.cfi || !m.color)return;
     const colors={
@@ -339,6 +383,7 @@ async function openBook(file){
       currentCfi=loc.start.cfi;
       currentChapter=loc.start.href||"";
       localStorage.setItem("reader-cfi",loc.start.cfi);
+      saveBookCache();
       updateToc(loc);updateProgress(loc);
     }
   });
@@ -346,6 +391,7 @@ async function openBook(file){
   $("bookTitle").textContent=meta.title||file.name.replace(/\.epub$/i,"");
   $("bookAuthor").textContent=meta.creator||"EPUB";
   activeBookId=bookId(meta,file);
+  activateBookCache(activeBookId);
   updateLibrary(meta,file,0);
   startReadingTimer();
   await buildToc();
@@ -475,14 +521,15 @@ function installMarkInteraction(host){
       while(mark.firstChild) parent.insertBefore(mark.firstChild,mark);
       mark.remove();
 
-      const saved=JSON.parse(localStorage.getItem("reader-marks-v5")||"[]");
+      const saved=Array.isArray(marks)?marks.slice():[];
       const pos=saved.findIndex(x=>
         (x.text||"").replace(/\s+/g," ").trim()===text &&
         (x.chapter||"")===currentChapter
       );
       if(pos>=0)saved.splice(pos,1);
-      localStorage.setItem("reader-marks-v5",JSON.stringify(saved));
+      try{localStorage.setItem("reader-marks-v5",JSON.stringify(saved));}catch(_){}
       marks=saved;
+      saveBookCache();
       close();
       toast("Underline removed");
       if(!$("drawer").classList.contains("hidden") && $("drawerTitle").textContent==="Notes") renderDrawer("Notes");
@@ -580,12 +627,13 @@ function installBrowserMarking(host){
     if(!ok){hide();toast("Could not mark this selection");return}
     hide();
     try{window.getSelection().removeAllRanges()}catch(_){}
-    const rec={text,color,chapter:currentChapter||"Current chapter",cfi:currentCfi,at:Date.now()};
-    let saved=safeJSON("reader-marks-v5",[]);
+    const rec={id:"m-"+Date.now()+"-"+Math.random().toString(36).slice(2,8),text,color,chapter:currentChapter||"Current chapter",cfi:currentCfi,at:Date.now(),bookId:activeBookId};
+    let saved=Array.isArray(marks)?marks.slice():safeJSON("reader-marks-v5",[]);
     if(!Array.isArray(saved))saved=[];
     saved.push(rec); saved=saved.slice(-500);
     try{localStorage.setItem("reader-marks-v5",JSON.stringify(saved))}catch(_){}
     marks=saved;
+    saveBookCache();
     markColor=color;
     try{localStorage.setItem("reader-mark-color",color)}catch(_){}
     setMarkColor(color,false);
@@ -941,7 +989,7 @@ function installMarking(view){
 
 
 function restoreMarks(doc){
- const saved=JSON.parse(localStorage.getItem("reader-marks-v34")||localStorage.getItem("reader-marks")||"[]");if(!saved.length||!doc?.body)return;
+ const saved=Array.isArray(marks)?marks:[];if(!saved.length||!doc?.body)return;
  saved.forEach(m=>{
    if(!m.text||m.text.length<2)return;
    const w=doc.createTreeWalker(doc.body,NodeFilter.SHOW_TEXT),hits=[];
